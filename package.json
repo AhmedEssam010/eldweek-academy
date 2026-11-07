@@ -6,12 +6,23 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "supabase:check": "node scripts/verify-supabase-connection.mjs",
+    "auth:flags": "node scripts/report-auth-flags.mjs",
+    "auth:owner-status": "node scripts/check-owner-status.mjs",
+    "auth:provision-owner": "node scripts/provision-owner.mjs",
+    "test:security": "node scripts/run-security-tests.mjs"
   },
   "dependencies": {
+    "@mux/mux-node": "^15.5.0",
+    "@mux/mux-player-react": "^3.14.1",
+    "@supabase/ssr": "^0.12.7",
+    "@supabase/supabase-js": "^2.118.0",
+    "lucide-react": "^1.70.0",
     "next": "16.4.3",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "server-only": "^0.0.1"
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "^4",

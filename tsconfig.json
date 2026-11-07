@@ -30,5 +30,10 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules"]
+  "exclude": [
+    "node_modules",
+    "supabase/functions",
+    "src/lib/learning/playback-policy.test.ts",
+    "src/lib/learning/mux-policy.test.ts"
+  ]
 }
