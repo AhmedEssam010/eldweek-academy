@@ -4,6 +4,7 @@ import { SetupRequiredPanel } from "@/components/dashboard/SetupRequiredPanel";
 import { EmptyState } from "@/components/dashboard/EmptyState";
 import { PaymentStatusBadge, PaymentMethodLabel } from "@/components/dashboard/PaymentBadges";
 import { PaymentReviewActions } from "@/components/dashboard/PaymentReviewActions";
+import { PaymentReceiptViewer } from "@/components/dashboard/PaymentReceiptViewer";
 import { listPaymentRequests } from "@/lib/dashboard/students-data";
 import {
   approvePaymentRequestAction,
@@ -118,10 +119,12 @@ export default async function AdminPaymentsPage({ searchParams }: PageProps) {
                       </span>
                     </span>
                   </div>
-                  <p className="text-sm text-white/60">
-                    <span className="text-white/45">مرجع التحويل:</span>{" "}
-                    {payment.receiptPath}
-                  </p>
+                  <div className="pt-1">
+                    <PaymentReceiptViewer
+                      paymentRequestId={payment.id}
+                      receiptPath={payment.receiptPath}
+                    />
+                  </div>
                   {payment.rejectionReason ? (
                     <p className="text-sm text-red-300">
                       سبب الرفض: {payment.rejectionReason}

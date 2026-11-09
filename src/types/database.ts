@@ -42,6 +42,14 @@ export type ExamAttemptStatus =
   | "expired"
   | "abandoned";
 
+export type ExamQuestionType = "mcq" | "true_false" | "essay";
+
+export type ExamGradingStatus =
+  | "not_applicable"
+  | "awaiting_essay"
+  | "draft"
+  | "finalized";
+
 export type Profile = {
   id: string;
   full_name: string;
@@ -88,12 +96,17 @@ export type CourseSemester = {
   updated_at: string;
 };
 
+export type LessonVideoSource = "mux" | "youtube";
+
 export type Lesson = {
   id: string;
   semester_id: string;
   title: string;
   description: string;
   video_asset_id: string | null;
+  /** mux | youtube | null — يُدار عبر service_role بعد الهجرة */
+  video_source: LessonVideoSource | null;
+  youtube_video_id: string | null;
   duration_seconds: number | null;
   sort_order: number;
   is_published: boolean;
@@ -158,6 +171,7 @@ export type Exam = {
   passing_score: number;
   max_attempts: number | null;
   is_published: boolean;
+  release_model_answers: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -168,6 +182,12 @@ export type ExamQuestion = {
   question_text: string;
   sort_order: number;
   points: number;
+  question_type: ExamQuestionType;
+};
+
+export type ExamQuestionGuide = {
+  question_id: string;
+  model_answer: string | null;
 };
 
 export type ExamOption = {
@@ -187,6 +207,13 @@ export type ExamAttempt = {
   submitted_at: string | null;
   score: number | null;
   status: ExamAttemptStatus;
+  grading_status: ExamGradingStatus;
+  objective_earned: number | null;
+  essay_earned: number | null;
+  total_points: number | null;
+  graded_at: string | null;
+  graded_by: string | null;
+  results_released_at: string | null;
 };
 
 export type ExamAnswer = {
@@ -195,7 +222,14 @@ export type ExamAnswer = {
   question_id: string;
   selected_option_id: string | null;
   is_correct: boolean | null;
-  awarded_points: number;
+  awarded_points: number | null;
+  essay_text: string | null;
+  teacher_feedback: string | null;
+  question_type_snapshot: ExamQuestionType | null;
+  question_text_snapshot: string | null;
+  points_snapshot: number | null;
+  sort_order_snapshot: number | null;
+  graded_at: string | null;
 };
 
 export type AuditLog = {
@@ -315,6 +349,11 @@ export type Database = {
         };
         Update: Partial<ExamAnswer>;
       };
+      exam_question_guides: {
+        Row: ExamQuestionGuide;
+        Insert: Partial<ExamQuestionGuide> & { question_id: string };
+        Update: Partial<ExamQuestionGuide>;
+      };
       audit_logs: {
         Row: AuditLog;
         Insert: Partial<AuditLog> & {
@@ -358,6 +397,8 @@ export type Database = {
           lesson_id: string;
           has_video_asset: boolean;
           duration_seconds: number | null;
+          video_source: string | null;
+          youtube_video_id: string | null;
         }[];
       };
       student_has_active_enrollment_for_course: {
@@ -380,10 +421,31 @@ export type Database = {
         Args: { p_attempt_id: string; p_answers: unknown };
         Returns: {
           attempt_id: string;
-          score: number;
+          score: number | null;
           status: ExamAttemptStatus;
+          passed: boolean | null;
+          grading_status: ExamGradingStatus;
+        }[];
+      };
+      save_exam_essay_grades_draft: {
+        Args: { p_attempt_id: string; p_grades: unknown };
+        Returns: undefined;
+      };
+      finalize_exam_grading: {
+        Args: { p_attempt_id: string };
+        Returns: {
+          attempt_id: string;
+          score: number;
           passed: boolean;
         }[];
+      };
+      get_exam_attempt_review: {
+        Args: { p_attempt_id: string };
+        Returns: unknown;
+      };
+      get_exam_grading_detail: {
+        Args: { p_attempt_id: string };
+        Returns: unknown;
       };
       provision_super_admin: {
         Args: {
@@ -403,6 +465,8 @@ export type Database = {
       enrollment_status: EnrollmentStatus;
       audit_action: AuditAction;
       exam_attempt_status: ExamAttemptStatus;
+      exam_question_type: ExamQuestionType;
+      exam_grading_status: ExamGradingStatus;
     };
   };
 };

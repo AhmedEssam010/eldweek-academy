@@ -5,8 +5,11 @@ import { createClient } from "@/lib/supabase/server";
 import { getAuthReadiness } from "@/lib/auth/readiness";
 import type { CourseStatus } from "@/types/database";
 import type {
+  ExamAttemptReviewView,
   ExamAttemptSummary,
   ExamEditorView,
+  ExamGradingDetailView,
+  ExamGradingQueueItem,
   ExamListItem,
   ExamAttemptStaffRow,
   ExamTakingView,
@@ -471,7 +474,7 @@ export async function getExamEditorData(
   const { data: exam, error } = await access.supabase
     .from("exams")
     .select(
-      "id, title, description, lesson_id, semester_id, duration_minutes, passing_score, max_attempts, is_published",
+      "id, title, description, lesson_id, semester_id, duration_minutes, passing_score, max_attempts, is_published, release_model_answers",
     )
     .eq("id", examId)
     .maybeSingle();
@@ -489,12 +492,42 @@ export async function getExamEditorData(
   const { data: questions, error: questionsError } = await access.supabase
     .from("exam_questions")
     .select(
-      "id, question_text, sort_order, points, exam_options(id, option_text, sort_order, is_correct)",
+      "id, question_text, sort_order, points, question_type, exam_options(id, option_text, sort_order, is_correct)",
     )
     .eq("exam_id", examId)
     .order("sort_order", { ascending: true });
 
   if (questionsError) return unavailableResult(null);
+
+  const questionIds = (questions ?? []).map((q) => q.id);
+  const guides = new Map<string, string | null>();
+  if (questionIds.length > 0) {
+    const { data: guideRows } = await access.supabase
+      .from("exam_question_guides")
+      .select("question_id, model_answer")
+      .in("question_id", questionIds);
+    for (const guide of guideRows ?? []) {
+      guides.set(guide.question_id, guide.model_answer);
+    }
+  }
+
+  const mappedQuestions = (questions ?? []).map((q) => ({
+    id: q.id,
+    questionText: q.question_text,
+    sortOrder: q.sort_order,
+    points: Number(q.points ?? 1),
+    questionType: (q.question_type ?? "mcq") as
+      | "mcq"
+      | "true_false"
+      | "essay",
+    modelAnswer: guides.get(q.id) ?? null,
+    options: (Array.isArray(q.exam_options) ? q.exam_options : []).map((o) => ({
+      id: o.id,
+      optionText: o.option_text,
+      sortOrder: o.sort_order,
+      isCorrect: Boolean(o.is_correct),
+    })),
+  }));
 
   return {
     availability: "ready",
@@ -509,21 +542,10 @@ export async function getExamEditorData(
       passingScore: Number(exam.passing_score ?? 50),
       maxAttempts: exam.max_attempts,
       isPublished: Boolean(exam.is_published),
-      questionsCount: questions?.length ?? 0,
-      questions: (questions ?? []).map((q) => ({
-        id: q.id,
-        questionText: q.question_text,
-        sortOrder: q.sort_order,
-        points: Number(q.points ?? 1),
-        options: (Array.isArray(q.exam_options) ? q.exam_options : []).map(
-          (o) => ({
-            id: o.id,
-            optionText: o.option_text,
-            sortOrder: o.sort_order,
-            isCorrect: Boolean(o.is_correct),
-          }),
-        ),
-      })),
+      releaseModelAnswers: Boolean(exam.release_model_answers),
+      questionsCount: mappedQuestions.length,
+      totalPoints: mappedQuestions.reduce((sum, q) => sum + q.points, 0),
+      questions: mappedQuestions,
     },
   };
 }
@@ -843,7 +865,7 @@ export async function getExamTakingData(
   const { data: openAttempt } = studentId
     ? await access.supabase
         .from("exam_attempts")
-        .select("id, ends_at, status, score")
+        .select("id, ends_at, status, score, grading_status")
         .eq("exam_id", examId)
         .eq("student_id", studentId)
         .order("started_at", { ascending: false })
@@ -870,7 +892,7 @@ export async function getExamTakingData(
 
   const { data: questions, error: questionsError } = await access.supabase
     .from("exam_questions")
-    .select("id, question_text, sort_order, points")
+    .select("id, question_text, sort_order, points, question_type")
     .eq("exam_id", examId)
     .order("sort_order", { ascending: true });
 
@@ -907,6 +929,8 @@ export async function getExamTakingData(
       endsAt: openAttempt?.status === "in_progress" ? openAttempt.ends_at : null,
       serverNow: new Date().toISOString(),
       attemptStatus: (openAttempt?.status as ExamTakingView["attemptStatus"]) ?? null,
+      gradingStatus:
+        (openAttempt?.grading_status as ExamTakingView["gradingStatus"]) ?? null,
       score: openAttempt?.score == null ? null : Number(openAttempt.score),
       passed:
         openAttempt?.status === "submitted" && openAttempt.score != null
@@ -917,6 +941,7 @@ export async function getExamTakingData(
         questionText: q.question_text,
         sortOrder: q.sort_order,
         points: Number(q.points ?? 1),
+        questionType: (q.question_type ?? "mcq") as ExamTakingView["questions"][number]["questionType"],
         options: (options ?? [])
           .filter((o) => o.question_id === q.id)
           .map((o) => ({
@@ -937,7 +962,7 @@ export async function listExamAttempts(
 
   const { data, error } = await access.supabase
     .from("exam_attempts")
-    .select("id, student_id, status, score, started_at, submitted_at")
+    .select("id, student_id, status, score, started_at, submitted_at, grading_status")
     .eq("exam_id", examId)
     .order("started_at", { ascending: false });
 
@@ -964,6 +989,11 @@ export async function listExamAttempts(
       id: row.id,
       studentName: names.get(row.student_id) ?? "طالب",
       status: row.status,
+      gradingStatus: (row.grading_status ?? "not_applicable") as
+        | "not_applicable"
+        | "awaiting_essay"
+        | "draft"
+        | "finalized",
       score: row.score == null ? null : Number(row.score),
       startedAt: row.started_at,
       submittedAt: row.submitted_at,
@@ -982,7 +1012,7 @@ export async function listStudentExamAttempts(
   const { data, error } = await access.supabase
     .from("exam_attempts")
     .select(
-      "id, exam_id, status, score, started_at, submitted_at, exams(title, passing_score)",
+      "id, exam_id, status, score, started_at, submitted_at, grading_status, objective_earned, essay_earned, total_points, results_released_at, exams(title, passing_score)",
     )
     .eq("student_id", studentId)
     .order("started_at", { ascending: false });
@@ -998,16 +1028,27 @@ export async function listStudentExamAttempts(
     const exam = Array.isArray(row.exams) ? row.exams[0] : row.exams;
     const score = row.score === null || row.score === undefined ? null : Number(row.score);
     const passing = Number(exam?.passing_score ?? 50);
+    const gradingStatus = (row.grading_status ??
+      "not_applicable") as ExamAttemptSummary["gradingStatus"];
+    const resultsReleased = Boolean(row.results_released_at);
     return {
       id: row.id,
       examId: row.exam_id,
       examTitle: exam?.title ?? "امتحان",
       status: row.status as ExamAttemptSummary["status"],
-      score,
+      gradingStatus,
+      score: resultsReleased ? score : null,
+      objectiveEarned:
+        row.objective_earned == null ? null : Number(row.objective_earned),
+      essayEarned: row.essay_earned == null ? null : Number(row.essay_earned),
+      totalPoints: row.total_points == null ? null : Number(row.total_points),
       startedAt: row.started_at,
       submittedAt: row.submitted_at,
       passed:
-        score === null || row.status !== "submitted" ? null : score >= passing,
+        !resultsReleased || score === null || row.status !== "submitted"
+          ? null
+          : score >= passing,
+      resultsReleased,
     };
   });
 
@@ -1018,5 +1059,251 @@ export async function listStudentExamAttempts(
         ? "لا توجد محاولات امتحان بعد."
         : "تم جلب المحاولات من الخادم فقط.",
     data: mapped,
+  };
+}
+
+export async function listExamGradingQueue(filters?: {
+  courseId?: string;
+  examId?: string;
+  status?: "pending" | "graded" | "all";
+}): Promise<LearningQueryResult<ExamGradingQueueItem[]>> {
+  const access = await getClient();
+  if (!access.ready || !access.supabase) return setupResult([]);
+
+  let query = access.supabase
+    .from("exam_attempts")
+    .select(
+      "id, exam_id, student_id, submitted_at, grading_status, objective_earned, total_points",
+    )
+    .eq("status", "submitted")
+    .order("submitted_at", { ascending: false });
+
+  const status = filters?.status ?? "pending";
+  if (status === "pending") {
+    query = query.in("grading_status", ["awaiting_essay", "draft"]);
+  } else if (status === "graded") {
+    query = query.eq("grading_status", "finalized");
+  } else {
+    query = query.in("grading_status", ["awaiting_essay", "draft", "finalized"]);
+  }
+
+  if (filters?.examId && UUID_LIKE(filters.examId)) {
+    query = query.eq("exam_id", filters.examId);
+  }
+
+  const { data, error } = await query;
+  if (error) {
+    return unavailableResult([], "تعذر قراءة طابور التصحيح. طبّق هجرة أنواع الأسئلة إن لزم.");
+  }
+
+  const examIds = [...new Set((data ?? []).map((row) => row.exam_id))];
+  const examMeta = new Map<string, { title: string; courseId: string; courseTitle: string }>();
+  if (examIds.length > 0) {
+    const { data: exams } = await access.supabase
+      .from("exams")
+      .select("id, title, semester_id")
+      .in("id", examIds);
+    const semesterIds = [
+      ...new Set((exams ?? []).map((exam) => exam.semester_id).filter(Boolean)),
+    ] as string[];
+    const semesterCourse = new Map<string, string>();
+    if (semesterIds.length > 0) {
+      const { data: semesters } = await access.supabase
+        .from("course_semesters")
+        .select("id, course_id")
+        .in("id", semesterIds);
+      for (const semester of semesters ?? []) {
+        semesterCourse.set(semester.id, semester.course_id);
+      }
+    }
+    const courseIds = [...new Set([...semesterCourse.values()])];
+    const courseTitles = new Map<string, string>();
+    if (courseIds.length > 0) {
+      const { data: courses } = await access.supabase
+        .from("courses")
+        .select("id, title")
+        .in("id", courseIds);
+      for (const course of courses ?? []) {
+        courseTitles.set(course.id, course.title);
+      }
+    }
+    for (const exam of exams ?? []) {
+      const courseId = exam.semester_id
+        ? (semesterCourse.get(exam.semester_id) ?? "")
+        : "";
+      examMeta.set(exam.id, {
+        title: exam.title,
+        courseId,
+        courseTitle: courseTitles.get(courseId) ?? "كورس",
+      });
+    }
+  }
+
+  const studentIds = [...new Set((data ?? []).map((row) => row.student_id))];
+  const names = new Map<string, string>();
+  if (studentIds.length > 0) {
+    const { data: profiles } = await access.supabase
+      .from("profiles")
+      .select("id, full_name")
+      .in("id", studentIds);
+    for (const profile of profiles ?? []) {
+      names.set(profile.id, profile.full_name ?? "طالب");
+    }
+  }
+
+  const mapped: ExamGradingQueueItem[] = [];
+  for (const row of data ?? []) {
+    const meta = examMeta.get(row.exam_id);
+    const courseId = meta?.courseId ?? "";
+    if (filters?.courseId && courseId !== filters.courseId) continue;
+    mapped.push({
+      attemptId: row.id,
+      examId: row.exam_id,
+      examTitle: meta?.title ?? "امتحان",
+      courseId,
+      courseTitle: meta?.courseTitle ?? "كورس",
+      studentName: names.get(row.student_id) ?? "طالب",
+      submittedAt: row.submitted_at,
+      objectiveEarned:
+        row.objective_earned == null ? null : Number(row.objective_earned),
+      totalPoints: row.total_points == null ? null : Number(row.total_points),
+      gradingStatus: (row.grading_status ?? "awaiting_essay") as ExamGradingQueueItem["gradingStatus"],
+    });
+  }
+
+  return {
+    availability: mapped.length === 0 ? "empty" : "ready",
+    message: mapped.length === 0 ? "لا توجد تسليمات." : "طابور التصحيح جاهز.",
+    data: mapped,
+  };
+}
+
+function UUID_LIKE(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value,
+  );
+}
+
+export async function getExamGradingDetail(
+  attemptId: string,
+): Promise<LearningQueryResult<ExamGradingDetailView | null>> {
+  const access = await getClient();
+  if (!access.ready || !access.supabase) return setupResult(null);
+  if (!UUID_LIKE(attemptId)) {
+    return { availability: "empty", message: "معرّف غير صالح.", data: null };
+  }
+
+  const { data, error } = await access.supabase.rpc("get_exam_grading_detail", {
+    p_attempt_id: attemptId,
+  });
+  if (error || !data) {
+    return unavailableResult(null, "تعذر جلب تفاصيل التصحيح أو غير مصرّح.");
+  }
+
+  const payload = data as Record<string, unknown>;
+  const answersRaw = Array.isArray(payload.answers) ? payload.answers : [];
+  return {
+    availability: "ready",
+    message: "تفاصيل التصحيح.",
+    data: {
+      attemptId: String(payload.attempt_id),
+      examId: String(payload.exam_id),
+      examTitle: String(payload.exam_title ?? "امتحان"),
+      courseId: String(payload.course_id ?? ""),
+      courseTitle: String(payload.course_title ?? "كورس"),
+      studentId: String(payload.student_id ?? ""),
+      studentName: String(payload.student_name ?? "طالب"),
+      submittedAt: (payload.submitted_at as string | null) ?? null,
+      gradingStatus: (payload.grading_status as ExamGradingDetailView["gradingStatus"]) ?? "awaiting_essay",
+      score: payload.score == null ? null : Number(payload.score),
+      objectiveEarned:
+        payload.objective_earned == null ? null : Number(payload.objective_earned),
+      essayEarned: payload.essay_earned == null ? null : Number(payload.essay_earned),
+      totalPoints: payload.total_points == null ? null : Number(payload.total_points),
+      answers: answersRaw.map((item) => {
+        const row = item as Record<string, unknown>;
+        return {
+          answerId: String(row.answer_id),
+          questionId: String(row.question_id),
+          questionType: (row.question_type as ExamGradingDetailView["answers"][number]["questionType"]) ?? "mcq",
+          questionText: String(row.question_text ?? ""),
+          points: Number(row.points ?? 0),
+          awardedPoints: row.awarded_points == null ? null : Number(row.awarded_points),
+          isCorrect: row.is_correct == null ? null : Boolean(row.is_correct),
+          selectedOptionText: (row.selected_option_text as string | null) ?? null,
+          correctOptionText: (row.correct_option_text as string | null) ?? null,
+          essayText: (row.essay_text as string | null) ?? null,
+          teacherFeedback: (row.teacher_feedback as string | null) ?? null,
+          modelAnswer: (row.model_answer as string | null) ?? null,
+        };
+      }),
+    },
+  };
+}
+
+export async function getExamAttemptReview(
+  attemptId: string,
+): Promise<LearningQueryResult<ExamAttemptReviewView | null>> {
+  const access = await getClient();
+  if (!access.ready || !access.supabase) return setupResult(null);
+  if (!UUID_LIKE(attemptId)) {
+    return { availability: "empty", message: "معرّف غير صالح.", data: null };
+  }
+
+  const { data, error } = await access.supabase.rpc("get_exam_attempt_review", {
+    p_attempt_id: attemptId,
+  });
+  if (error || !data) {
+    return unavailableResult(null, "تعذر جلب مراجعة النتيجة.");
+  }
+
+  const payload = data as Record<string, unknown>;
+  if (!payload.released) {
+    return {
+      availability: "ready",
+      message: String(payload.message ?? "النتيجة لم تُنشر بعد."),
+      data: {
+        released: false,
+        message: String(payload.message ?? "النتيجة لم تُنشر بعد."),
+        gradingStatus: payload.grading_status as ExamAttemptReviewView["gradingStatus"],
+      },
+    };
+  }
+
+  const answersRaw = Array.isArray(payload.answers) ? payload.answers : [];
+  return {
+    availability: "ready",
+    message: "مراجعة النتيجة.",
+    data: {
+      released: true,
+      attemptId: String(payload.attempt_id),
+      examId: String(payload.exam_id),
+      examTitle: String(payload.exam_title ?? "امتحان"),
+      score: payload.score == null ? null : Number(payload.score),
+      passingScore: Number(payload.passing_score ?? 50),
+      passed: payload.passed == null ? null : Boolean(payload.passed),
+      gradingStatus: payload.grading_status as ExamAttemptReviewView["gradingStatus"],
+      objectiveEarned:
+        payload.objective_earned == null ? null : Number(payload.objective_earned),
+      essayEarned: payload.essay_earned == null ? null : Number(payload.essay_earned),
+      totalPoints: payload.total_points == null ? null : Number(payload.total_points),
+      answers: answersRaw.map((item) => {
+        const row = item as Record<string, unknown>;
+        return {
+          answerId: String(row.answer_id),
+          questionId: String(row.question_id),
+          questionType: (row.question_type as NonNullable<ExamAttemptReviewView["answers"]>[number]["questionType"]) ?? "mcq",
+          questionText: String(row.question_text ?? ""),
+          points: Number(row.points ?? 0),
+          awardedPoints: row.awarded_points == null ? null : Number(row.awarded_points),
+          isCorrect: row.is_correct == null ? null : Boolean(row.is_correct),
+          selectedOptionText: (row.selected_option_text as string | null) ?? null,
+          correctOptionText: (row.correct_option_text as string | null) ?? null,
+          essayText: (row.essay_text as string | null) ?? null,
+          teacherFeedback: (row.teacher_feedback as string | null) ?? null,
+          modelAnswer: (row.model_answer as string | null) ?? null,
+        };
+      }),
+    },
   };
 }

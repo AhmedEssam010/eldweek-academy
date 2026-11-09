@@ -13,9 +13,20 @@ type ExamTakingInterfaceProps = {
   exam: ExamTakingView;
 };
 
+type AnswerState = {
+  optionId?: string;
+  essayText?: string;
+};
+
+const typeLabel: Record<string, string> = {
+  mcq: "اختيار من متعدد",
+  true_false: "صح أو خطأ",
+  essay: "مقالي",
+};
+
 export function ExamTakingInterface({ exam }: ExamTakingInterfaceProps) {
   const router = useRouter();
-  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [answers, setAnswers] = useState<Record<string, AnswerState>>({});
   const [message, setMessage] = useState<string | null>(null);
   const [ok, setOk] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -25,6 +36,7 @@ export function ExamTakingInterface({ exam }: ExamTakingInterfaceProps) {
   const [closed, setClosed] = useState(
     exam.attemptStatus === "submitted" || exam.attemptStatus === "expired",
   );
+  const [gradingStatus, setGradingStatus] = useState(exam.gradingStatus);
 
   const canAnswer = Boolean(attemptId) && !closed;
 
@@ -38,7 +50,11 @@ export function ExamTakingInterface({ exam }: ExamTakingInterfaceProps) {
           <p>المدة: {exam.durationMinutes ? `${exam.durationMinutes} دقيقة` : "غير محددة"}</p>
           <p>المحاولات: {exam.maxAttempts ?? "غير محدودة"}</p>
         </div>
-        {exam.score != null && exam.attemptStatus !== "in_progress" ? (
+        {gradingStatus === "awaiting_essay" || gradingStatus === "draft" ? (
+          <p className="mt-3 text-sm text-amber-100">
+            تم تسليم الامتحان بنجاح، وجارٍ تصحيح الأسئلة المقالية.
+          </p>
+        ) : exam.score != null && exam.attemptStatus !== "in_progress" ? (
           <p className="mt-3 text-sm text-emerald-200">
             آخر نتيجة: {exam.score}%{exam.passed ? " — ناجح" : " — لم تبلغ درجة النجاح"}
           </p>
@@ -87,7 +103,7 @@ export function ExamTakingInterface({ exam }: ExamTakingInterfaceProps) {
       {confirmOpen && attemptId ? (
         <div className="rounded-2xl border border-secondary/40 bg-secondary/10 p-4">
           <p className="text-sm text-white">
-            بعد التسليم لا يمكن تعديل الإجابات. الدرجة تُحسب على الخادم، وإذا انتهى الوقت تُغلق المحاولة هناك.
+            بعد التسليم لا يمكن تعديل الإجابات. الأسئلة الموضوعية تُصحَّح على الخادم، والمقالية تبقى بانتظار المصحّح.
           </p>
           <div className="mt-3 flex gap-2">
             <button
@@ -100,15 +116,19 @@ export function ExamTakingInterface({ exam }: ExamTakingInterfaceProps) {
                   const result = await submitExamAttemptAction({
                     examId: exam.id,
                     attemptId,
-                    answers: Object.entries(answers).map(([questionId, optionId]) => ({
-                      questionId,
-                      optionId,
+                    answers: exam.questions.map((question) => ({
+                      questionId: question.id,
+                      optionId: answers[question.id]?.optionId ?? null,
+                      essayText: answers[question.id]?.essayText ?? null,
                     })),
                   });
                   setOk(result.ok);
                   setMessage(result.message);
                   if (result.ok) {
                     setClosed(true);
+                    setGradingStatus(
+                      (result.gradingStatus as ExamTakingView["gradingStatus"]) ?? null,
+                    );
                     router.refresh();
                   }
                 });
@@ -142,31 +162,56 @@ export function ExamTakingInterface({ exam }: ExamTakingInterfaceProps) {
       <ol className="space-y-4">
         {exam.questions.map((question, index) => (
           <li key={question.id} className="rounded-2xl border border-white/10 bg-surface p-4">
-            <p className="text-sm font-medium text-white">
-              {index + 1}. {question.questionText}
-              <span className="ms-2 text-xs text-white/45">({question.points} درجة)</span>
-            </p>
-            <div className="mt-3 space-y-2">
-              {question.options.map((option) => (
-                <label
-                  key={option.id}
-                  className="flex items-start gap-2 rounded-xl border border-white/10 bg-background/40 px-3 py-2 text-sm text-white/80"
-                >
-                  <input
-                    type="radio"
-                    name={`q-${question.id}`}
-                    value={option.id}
-                    disabled={!canAnswer}
-                    checked={answers[question.id] === option.id}
-                    onChange={() =>
-                      setAnswers((prev) => ({ ...prev, [question.id]: option.id }))
-                    }
-                    className="mt-1 accent-secondary"
-                  />
-                  <span>{option.optionText}</span>
-                </label>
-              ))}
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm font-medium text-white">
+                {index + 1}. {question.questionText}
+                <span className="ms-2 text-xs text-white/45">({question.points} درجة)</span>
+              </p>
+              <span className="rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] text-white/55">
+                {typeLabel[question.questionType] ?? question.questionType}
+              </span>
             </div>
+
+            {question.questionType === "essay" ? (
+              <textarea
+                rows={6}
+                disabled={!canAnswer}
+                value={answers[question.id]?.essayText ?? ""}
+                onChange={(event) =>
+                  setAnswers((prev) => ({
+                    ...prev,
+                    [question.id]: { essayText: event.target.value },
+                  }))
+                }
+                placeholder="اكتب إجابتك هنا..."
+                className="mt-3 w-full rounded-xl border border-white/15 bg-background px-4 py-3 text-sm text-white outline-none focus:border-secondary disabled:opacity-60"
+              />
+            ) : (
+              <div className="mt-3 space-y-2">
+                {question.options.map((option) => (
+                  <label
+                    key={option.id}
+                    className="flex items-start gap-2 rounded-xl border border-white/10 bg-background/40 px-3 py-2 text-sm text-white/80"
+                  >
+                    <input
+                      type="radio"
+                      name={`q-${question.id}`}
+                      value={option.id}
+                      disabled={!canAnswer}
+                      checked={answers[question.id]?.optionId === option.id}
+                      onChange={() =>
+                        setAnswers((prev) => ({
+                          ...prev,
+                          [question.id]: { optionId: option.id },
+                        }))
+                      }
+                      className="mt-1 accent-secondary"
+                    />
+                    <span>{option.optionText}</span>
+                  </label>
+                ))}
+              </div>
+            )}
           </li>
         ))}
       </ol>

@@ -41,9 +41,11 @@ export default async function AdminSemesterDetailPage({ params }: PageProps) {
     ...lesson,
     hasVideoAsset: presence.withVideo.has(lesson.id),
     videoLabel: presence.known
-      ? presence.withVideo.has(lesson.id)
-        ? "فيديو مرتبط"
-        : "بدون فيديو"
+      ? presence.sourceLabel.get(lesson.id) === "YouTube"
+        ? "YouTube"
+        : presence.sourceLabel.get(lesson.id) === "Mux"
+          ? "Mux"
+          : "بدون فيديو"
       : "حالة الفيديو غير مؤكدة",
   }));
 

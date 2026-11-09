@@ -324,6 +324,17 @@ BEGIN
     'lessons_catalog must not expose video_asset_id'
   );
 
+  PERFORM tests.assert_true(
+    NOT EXISTS (
+      SELECT 1
+      FROM information_schema.columns AS cols
+      WHERE cols.table_schema = 'public'
+        AND cols.table_name = 'lessons_catalog'
+        AND cols.column_name = 'youtube_video_id'
+    ),
+    'lessons_catalog must not expose youtube_video_id'
+  );
+
   PERFORM tests.become('anon', NULL);
   PERFORM tests.assert_raises(
     format('SELECT l.video_asset_id FROM public.lessons AS l WHERE l.id = %L', v_published_id),

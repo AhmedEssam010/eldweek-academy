@@ -34,6 +34,7 @@
     "node_modules",
     "supabase/functions",
     "src/lib/learning/playback-policy.test.ts",
-    "src/lib/learning/mux-policy.test.ts"
+    "src/lib/learning/mux-policy.test.ts",
+    "src/lib/learning/youtube-policy.test.ts"
   ]
 }

@@ -256,11 +256,41 @@ export async function authorizeLessonPlayback(input: {
     };
   }
 
+  // منحة القاعدة للمستحقين فقط — قد تتضمن يوتيوب بعد الهجرة.
+  const { data: playbackGrantRows } = await supabase.rpc(
+    "get_lesson_playback_grant",
+    { p_lesson_id: lessonId },
+  );
+  const playbackGrant = (Array.isArray(playbackGrantRows)
+    ? playbackGrantRows[0]
+    : playbackGrantRows) as {
+    video_source?: string | null;
+    youtube_video_id?: string | null;
+    has_video_asset?: boolean | null;
+  } | null;
+
+  if (
+    playbackGrant?.video_source === "youtube" &&
+    typeof playbackGrant.youtube_video_id === "string" &&
+    /^[A-Za-z0-9_-]{11}$/.test(playbackGrant.youtube_video_id)
+  ) {
+    return {
+      status: "authorized",
+      source: "youtube",
+      lessonId,
+      durationSeconds,
+      youtubeVideoId: playbackGrant.youtube_video_id,
+      message:
+        "تشغيل يوتيوب داخل المنصة للمستحقين. حماية يوتيوب أضعف من Mux الموقّع.",
+    };
+  }
+
   try {
     const signed = await issueSignedPlayback(lessonId);
     if (signed.state === "ready") {
       return {
         status: "authorized",
+        source: "mux",
         lessonId,
         durationSeconds,
         playbackUrl: signed.playbackUrl,

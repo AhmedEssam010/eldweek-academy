@@ -35,6 +35,11 @@ function mapExamError(error: { code?: string; message?: string }, fallback: stri
   }
   if (raw.includes("exam_lesson_semester_mismatch")) return "الدرس لا ينتمي للترم المختار.";
   if (raw.includes("exam_options_one_correct")) return "كل سؤال يجب أن يملك إجابة صحيحة واحدة فقط.";
+  if (raw.includes("grading_forbidden")) return "ليست لديك صلاحية تصحيح هذا الامتحان.";
+  if (raw.includes("attempt_not_gradable")) return "هذه المحاولة غير قابلة للتصحيح الآن.";
+  if (raw.includes("essays_incomplete")) return "يجب تصحيح كل الأسئلة المقالية قبل الاعتماد.";
+  if (raw.includes("invalid_essay_points")) return "درجة المقال يجب أن تكون بين 0 والحد الأقصى.";
+  if (raw.includes("essay_answer_not_found")) return "إجابة المقال غير موجودة.";
   console.error("[exam-action]", { code: error.code, message: error.message?.slice(0, 180) });
   return fallback;
 }
@@ -183,6 +188,7 @@ export async function updateExamSettingsAction(
   const durationRaw = String(formData.get("durationMinutes") ?? "").trim();
   const passingRaw = String(formData.get("passingScore") ?? "").trim();
   const attemptsRaw = String(formData.get("maxAttempts") ?? "").trim();
+  const releaseModelAnswers = formData.get("releaseModelAnswers") === "1";
 
   if (!UUID.test(examId)) return fail("معرّف الامتحان غير صالح.");
   if (title.length < 2) return fail("عنوان الامتحان مطلوب.");
@@ -213,6 +219,7 @@ export async function updateExamSettingsAction(
       duration_minutes: duration,
       passing_score: passing,
       max_attempts: maxAttempts,
+      release_model_answers: releaseModelAnswers,
     })
     .eq("id", examId);
 
@@ -235,16 +242,29 @@ export async function setExamPublishAction(
   if (publish) {
     const { data: questions, error } = await access.supabase
       .from("exam_questions")
-      .select("id, exam_options(id, is_correct, option_text)")
+      .select("id, question_type, exam_options(id, is_correct, option_text)")
       .eq("exam_id", examId);
     if (error) return fail(mapExamError(error, "تعذر التحقق من أسئلة الامتحان."));
     if (!questions || questions.length === 0) return fail("أضف سؤالًا واحدًا على الأقل قبل النشر.");
     for (const question of questions) {
+      const type = question.question_type ?? "mcq";
       const options = Array.isArray(question.exam_options) ? question.exam_options : [];
       const filled = options.filter((option) => option.option_text.trim().length > 0);
       const correct = filled.filter((option) => option.is_correct).length;
-      if (filled.length !== 4 || correct !== 1) {
-        return fail("كل سؤال يجب أن يحتوي على 4 خيارات وإجابة صحيحة واحدة قبل النشر.");
+      if (type === "essay") {
+        if (filled.length > 0) {
+          return fail("الأسئلة المقالية لا يجب أن تحتوي على خيارات اختيار.");
+        }
+        continue;
+      }
+      if (type === "true_false") {
+        if (filled.length !== 2 || correct !== 1) {
+          return fail("أسئلة صح/خطأ تحتاج خيارين وإجابة صحيحة واحدة قبل النشر.");
+        }
+        continue;
+      }
+      if (filled.length < 2 || correct !== 1) {
+        return fail("أسئلة الاختيار من متعدد تحتاج خيارين على الأقل وإجابة صحيحة واحدة.");
       }
     }
   }
@@ -266,14 +286,38 @@ export async function upsertExamQuestionAction(
   const questionId = String(formData.get("question_id") ?? "").trim();
   const questionText = String(formData.get("questionText") ?? "").trim();
   const points = Number(formData.get("points") ?? "1");
+  const questionTypeRaw = String(formData.get("question_type") ?? "mcq").trim();
+  const questionType =
+    questionTypeRaw === "true_false" || questionTypeRaw === "essay" || questionTypeRaw === "mcq"
+      ? questionTypeRaw
+      : null;
+  const modelAnswer = String(formData.get("modelAnswer") ?? "").trim();
+  const optionCount = Number(formData.get("option_count") ?? "4");
   const correctIndex = Number(formData.get("correctOption"));
-  const options = [0, 1, 2, 3].map((index) => String(formData.get(`option_${index}`) ?? "").trim());
 
   if (!UUID.test(examId)) return fail("معرّف الامتحان غير صالح.");
+  if (!questionType) return fail("نوع السؤال غير صالح.");
   if (questionText.length < 2) return fail("نص السؤال مطلوب.");
-  if (!Number.isFinite(points) || points <= 0 || points > 100) return fail("درجات السؤال بين 0.01 و 100.");
-  if (!options.every((option) => option.length > 0)) return fail("أدخل 4 خيارات غير فارغة.");
-  if (![0, 1, 2, 3].includes(correctIndex)) return fail("اختر إجابة صحيحة واحدة.");
+  if (!Number.isFinite(points) || points <= 0 || points > 100) {
+    return fail("درجات السؤال بين 0.01 و 100.");
+  }
+
+  let options: string[] = [];
+  if (questionType === "mcq") {
+    const count = Number.isInteger(optionCount) ? Math.min(6, Math.max(2, optionCount)) : 4;
+    options = Array.from({ length: count }, (_, index) =>
+      String(formData.get(`option_${index}`) ?? "").trim(),
+    );
+    if (!options.every((option) => option.length > 0)) {
+      return fail("أدخل نصًا لكل خيار.");
+    }
+    if (!Number.isInteger(correctIndex) || correctIndex < 0 || correctIndex >= options.length) {
+      return fail("اختر إجابة صحيحة واحدة.");
+    }
+  } else if (questionType === "true_false") {
+    options = ["صح", "خطأ"];
+    if (![0, 1].includes(correctIndex)) return fail("اختر صح أو خطأ كإجابة صحيحة.");
+  }
 
   const access = await requireExamManager(courseId);
   if (!access.ok) return access.result;
@@ -286,7 +330,11 @@ export async function upsertExamQuestionAction(
     if (!UUID.test(questionId)) return fail("معرّف السؤال غير صالح.");
     const { error } = await access.supabase
       .from("exam_questions")
-      .update({ question_text: questionText, points })
+      .update({
+        question_text: questionText,
+        points,
+        question_type: questionType,
+      })
       .eq("id", questionId)
       .eq("exam_id", examId);
     if (error) return fail(mapExamError(error, "تعذر تحديث السؤال."));
@@ -305,22 +353,44 @@ export async function upsertExamQuestionAction(
     const sortOrder = last && last.length > 0 ? Number(last[0]?.sort_order ?? 0) + 1 : 0;
     const { data: created, error } = await access.supabase
       .from("exam_questions")
-      .insert({ exam_id: examId, question_text: questionText, points, sort_order: sortOrder })
+      .insert({
+        exam_id: examId,
+        question_text: questionText,
+        points,
+        sort_order: sortOrder,
+        question_type: questionType,
+      })
       .select("id")
       .single();
     if (error || !created) return fail(mapExamError(error ?? {}, "تعذر إضافة السؤال."));
     savedId = created.id;
   }
 
-  const { error: optionsError } = await access.supabase.from("exam_options").insert(
-    options.map((optionText, index) => ({
-      question_id: savedId,
-      option_text: optionText,
-      is_correct: index === correctIndex,
-      sort_order: index,
-    })),
-  );
-  if (optionsError) return fail(mapExamError(optionsError, "تعذر حفظ الخيارات."));
+  if (questionType !== "essay") {
+    const { error: optionsError } = await access.supabase.from("exam_options").insert(
+      options.map((optionText, index) => ({
+        question_id: savedId,
+        option_text: optionText,
+        is_correct: index === correctIndex,
+        sort_order: index,
+      })),
+    );
+    if (optionsError) return fail(mapExamError(optionsError, "تعذر حفظ الخيارات."));
+  }
+
+  if (questionType === "essay") {
+    if (modelAnswer) {
+      const { error: guideError } = await access.supabase.from("exam_question_guides").upsert({
+        question_id: savedId,
+        model_answer: modelAnswer,
+      });
+      if (guideError) return fail(mapExamError(guideError, "تعذر حفظ نموذج الإجابة."));
+    } else {
+      await access.supabase.from("exam_question_guides").delete().eq("question_id", savedId);
+    }
+  } else {
+    await access.supabase.from("exam_question_guides").delete().eq("question_id", savedId);
+  }
 
   revalidateExam(courseId, examId);
   return success(questionId ? "تم حفظ السؤال." : "تمت إضافة السؤال.");
@@ -396,6 +466,7 @@ export type ExamTakeResult = CourseFormActionResult & {
   score?: number | null;
   passed?: boolean | null;
   status?: string;
+  gradingStatus?: string | null;
 };
 
 export async function startExamAttemptAction(examId: string): Promise<ExamTakeResult> {
@@ -429,7 +500,11 @@ export async function startExamAttemptAction(examId: string): Promise<ExamTakeRe
 export async function submitExamAttemptAction(input: {
   examId: string;
   attemptId: string;
-  answers: Array<{ questionId: string; optionId: string }>;
+  answers: Array<{
+    questionId: string;
+    optionId?: string | null;
+    essayText?: string | null;
+  }>;
 }): Promise<ExamTakeResult> {
   if (!getAuthReadiness().dbSchemaReady) return fail("قاعدة البيانات غير جاهزة.");
   if (!UUID.test(input.examId) || !UUID.test(input.attemptId)) return fail("بيانات المحاولة غير صالحة.");
@@ -437,10 +512,12 @@ export async function submitExamAttemptAction(input: {
   if (user.role !== "student") return fail("تسليم الامتحان متاح للطلاب فقط.");
 
   const payload = input.answers
-    .filter((answer) => UUID.test(answer.questionId) && UUID.test(answer.optionId))
+    .filter((answer) => UUID.test(answer.questionId))
     .map((answer) => ({
       question_id: answer.questionId,
-      selected_option_id: answer.optionId,
+      selected_option_id:
+        answer.optionId && UUID.test(answer.optionId) ? answer.optionId : null,
+      essay_text: answer.essayText?.trim() ? answer.essayText.trim() : null,
     }));
 
   const supabase = await createClient();
@@ -455,17 +532,84 @@ export async function submitExamAttemptAction(input: {
   const row = Array.isArray(data) ? data[0] : data;
   revalidatePath(`/student/exams/${input.examId}`);
   revalidatePath("/student/results");
+  revalidatePath("/admin/grading");
   const status = row?.status ?? "submitted";
   const score = row?.score == null ? null : Number(row.score);
+  const gradingStatus = row?.grading_status ?? "not_applicable";
+  const awaitingEssay = gradingStatus === "awaiting_essay";
   return {
     ok: true,
     message:
       status === "expired"
         ? "انتهى وقت الامتحان على الخادم. سُجّلت المحاولة منتهية."
-        : `تم التسليم. درجتك ${score ?? 0}%${row?.passed ? " — ناجح" : " — لم تبلغ درجة النجاح"}.`,
+        : awaitingEssay
+          ? "تم تسليم الامتحان بنجاح، وجارٍ تصحيح الأسئلة المقالية."
+          : `تم التسليم. درجتك ${score ?? 0}%${row?.passed ? " — ناجح" : " — لم تبلغ درجة النجاح"}.`,
     attemptId: input.attemptId,
     score,
     passed: row?.passed ?? null,
     status,
+    gradingStatus,
   };
+}
+
+export async function saveEssayGradesDraftAction(input: {
+  attemptId: string;
+  courseId: string;
+  grades: Array<{
+    answerId: string;
+    awardedPoints: number;
+    teacherFeedback: string;
+  }>;
+}): Promise<CourseFormActionResult> {
+  if (!UUID.test(input.attemptId) || !UUID.test(input.courseId)) {
+    return fail("بيانات التصحيح غير صالحة.");
+  }
+  const access = await requireExamManager(input.courseId);
+  if (!access.ok) return access.result;
+
+  const payload = input.grades
+    .filter((grade) => UUID.test(grade.answerId))
+    .map((grade) => ({
+      answer_id: grade.answerId,
+      awarded_points: grade.awardedPoints,
+      teacher_feedback: grade.teacherFeedback,
+    }));
+
+  if (payload.length === 0) return fail("لا توجد درجات لحفظها.");
+
+  const { error } = await access.supabase.rpc("save_exam_essay_grades_draft", {
+    p_attempt_id: input.attemptId,
+    p_grades: payload,
+  });
+  if (error) return fail(mapExamError(error, "تعذر حفظ مسودة التصحيح."));
+
+  revalidatePath("/admin/grading");
+  revalidatePath(`/admin/grading/${input.attemptId}`);
+  revalidatePath("/student/results");
+  return success("تم حفظ مسودة التصحيح.");
+}
+
+export async function finalizeExamGradingAction(
+  attemptId: string,
+  courseId: string,
+): Promise<CourseFormActionResult> {
+  if (!UUID.test(attemptId) || !UUID.test(courseId)) {
+    return fail("بيانات الاعتماد غير صالحة.");
+  }
+  const access = await requireExamManager(courseId);
+  if (!access.ok) return access.result;
+
+  const { data, error } = await access.supabase.rpc("finalize_exam_grading", {
+    p_attempt_id: attemptId,
+  });
+  if (error) return fail(mapExamError(error, "تعذر اعتماد التصحيح."));
+
+  const row = Array.isArray(data) ? data[0] : data;
+  revalidatePath("/admin/grading");
+  revalidatePath(`/admin/grading/${attemptId}`);
+  revalidatePath("/student/results");
+  return success(
+    `تم اعتماد التصحيح ونشر النتيجة. الدرجة النهائية ${row?.score ?? "—"}%.`,
+  );
 }

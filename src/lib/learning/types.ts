@@ -63,6 +63,7 @@ export type LessonDetailSafe = {
 export type PlaybackAuthorization =
   | {
       status: "authorized";
+      source: "mux";
       lessonId: string;
       durationSeconds: number | null;
       /** رابط موقّت فقط. لا يُصدر في هذه المرحلة. */
@@ -70,6 +71,14 @@ export type PlaybackAuthorization =
       muxPlaybackId: string;
       muxPlaybackToken: string;
       expiresAt: string;
+      message: string;
+    }
+  | {
+      status: "authorized";
+      source: "youtube";
+      lessonId: string;
+      durationSeconds: number | null;
+      youtubeVideoId: string;
       message: string;
     }
   | {
@@ -102,11 +111,21 @@ export type ExamListItem = {
   questionsCount: number;
 };
 
+export type ExamQuestionTypeView = "mcq" | "true_false" | "essay";
+
+export type ExamGradingStatusView =
+  | "not_applicable"
+  | "awaiting_essay"
+  | "draft"
+  | "finalized";
+
 export type ExamQuestionEditorView = {
   id: string;
   questionText: string;
   sortOrder: number;
   points: number;
+  questionType: ExamQuestionTypeView;
+  modelAnswer: string | null;
   options: Array<{
     id: string;
     optionText: string;
@@ -118,6 +137,8 @@ export type ExamQuestionEditorView = {
 
 export type ExamEditorView = ExamListItem & {
   questions: ExamQuestionEditorView[];
+  totalPoints: number;
+  releaseModelAnswers: boolean;
 };
 
 export type ExamTakingQuestion = {
@@ -125,6 +146,7 @@ export type ExamTakingQuestion = {
   questionText: string;
   sortOrder: number;
   points: number;
+  questionType: ExamQuestionTypeView;
   options: Array<{
     id: string;
     optionText: string;
@@ -144,6 +166,7 @@ export type ExamTakingView = {
   endsAt: string | null;
   serverNow: string;
   attemptStatus: "in_progress" | "submitted" | "expired" | "abandoned" | null;
+  gradingStatus: ExamGradingStatusView | null;
   score: number | null;
   passed: boolean | null;
 };
@@ -152,6 +175,7 @@ export type ExamAttemptStaffRow = {
   id: string;
   studentName: string;
   status: string;
+  gradingStatus: ExamGradingStatusView;
   score: number | null;
   startedAt: string;
   submittedAt: string | null;
@@ -168,10 +192,87 @@ export type ExamAttemptSummary = {
   examId: string;
   examTitle: string;
   status: "in_progress" | "submitted" | "expired" | "abandoned";
+  gradingStatus: ExamGradingStatusView;
   score: number | null;
+  objectiveEarned: number | null;
+  essayEarned: number | null;
+  totalPoints: number | null;
   startedAt: string;
   submittedAt: string | null;
   passed: boolean | null;
+  resultsReleased: boolean;
+};
+
+export type ExamGradingQueueItem = {
+  attemptId: string;
+  examId: string;
+  examTitle: string;
+  courseId: string;
+  courseTitle: string;
+  studentName: string;
+  submittedAt: string | null;
+  objectiveEarned: number | null;
+  totalPoints: number | null;
+  gradingStatus: ExamGradingStatusView;
+};
+
+export type ExamGradingDetailView = {
+  attemptId: string;
+  examId: string;
+  examTitle: string;
+  courseId: string;
+  courseTitle: string;
+  studentId: string;
+  studentName: string;
+  submittedAt: string | null;
+  gradingStatus: ExamGradingStatusView;
+  score: number | null;
+  objectiveEarned: number | null;
+  essayEarned: number | null;
+  totalPoints: number | null;
+  answers: Array<{
+    answerId: string;
+    questionId: string;
+    questionType: ExamQuestionTypeView;
+    questionText: string;
+    points: number;
+    awardedPoints: number | null;
+    isCorrect: boolean | null;
+    selectedOptionText: string | null;
+    correctOptionText: string | null;
+    essayText: string | null;
+    teacherFeedback: string | null;
+    modelAnswer: string | null;
+  }>;
+};
+
+export type ExamAttemptReviewView = {
+  released: boolean;
+  message?: string;
+  attemptId?: string;
+  examId?: string;
+  examTitle?: string;
+  score?: number | null;
+  passingScore?: number;
+  passed?: boolean | null;
+  gradingStatus?: ExamGradingStatusView;
+  objectiveEarned?: number | null;
+  essayEarned?: number | null;
+  totalPoints?: number | null;
+  answers?: Array<{
+    answerId: string;
+    questionId: string;
+    questionType: ExamQuestionTypeView;
+    questionText: string;
+    points: number;
+    awardedPoints: number | null;
+    isCorrect: boolean | null;
+    selectedOptionText: string | null;
+    correctOptionText: string | null;
+    essayText: string | null;
+    teacherFeedback: string | null;
+    modelAnswer: string | null;
+  }>;
 };
 
 export type StudentCourseCard = {

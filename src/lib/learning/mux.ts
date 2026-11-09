@@ -53,26 +53,74 @@ async function readStoredAssetId(lessonId: string): Promise<string | null | "una
   return decodeMuxAssetId(data?.video_asset_id ?? null);
 }
 
-/** وجود فيديو فقط. المعرّف الخاص لا يغادر الخادم. */
+export type LessonVideoPresence = {
+  known: boolean;
+  withVideo: Set<string>;
+  /** lessonId → Mux | YouTube */
+  sourceLabel: Map<string, "Mux" | "YouTube">;
+};
+
+/** وجود فيديو فقط. المعرّفات الخاصة لا تغادر الخادم. */
 export async function lessonVideoPresence(
   lessonIds: string[],
-): Promise<{ known: boolean; withVideo: Set<string> }> {
+): Promise<LessonVideoPresence> {
   const unique = [...new Set(lessonIds)].filter(Boolean);
-  if (unique.length === 0) return { known: true, withVideo: new Set() };
+  if (unique.length === 0) {
+    return { known: true, withVideo: new Set(), sourceLabel: new Map() };
+  }
   const service = createServiceRoleClient();
-  if (!service) return { known: false, withVideo: new Set() };
-  const { data, error } = await service
+  if (!service) {
+    return { known: false, withVideo: new Set(), sourceLabel: new Map() };
+  }
+
+  let data:
+    | Array<{
+        id: string;
+        video_asset_id: string | null;
+        video_source?: string | null;
+        youtube_video_id?: string | null;
+      }>
+    | null = null;
+
+  const withSource = await service
     .from("lessons")
-    .select("id, video_asset_id")
+    .select("id, video_asset_id, video_source, youtube_video_id")
     .in("id", unique);
-  if (error) return { known: false, withVideo: new Set() };
+  if (withSource.error) {
+    const legacy = await service
+      .from("lessons")
+      .select("id, video_asset_id")
+      .in("id", unique);
+    if (legacy.error) {
+      return { known: false, withVideo: new Set(), sourceLabel: new Map() };
+    }
+    data = legacy.data ?? [];
+  } else {
+    data = withSource.data ?? [];
+  }
+
   const withVideo = new Set<string>();
-  for (const row of data ?? []) {
-    if (typeof row.video_asset_id === "string" && row.video_asset_id.trim().length > 0) {
+  const sourceLabel = new Map<string, "Mux" | "YouTube">();
+  for (const row of data) {
+    const hasMux =
+      typeof row.video_asset_id === "string" &&
+      row.video_asset_id.trim().length > 0;
+    const hasYoutube =
+      row.video_source === "youtube" ||
+      (typeof row.youtube_video_id === "string" &&
+        /^[A-Za-z0-9_-]{11}$/.test(row.youtube_video_id));
+    if (row.video_source === "youtube" && hasYoutube) {
       withVideo.add(row.id);
+      sourceLabel.set(row.id, "YouTube");
+    } else if (hasMux) {
+      withVideo.add(row.id);
+      sourceLabel.set(row.id, "Mux");
+    } else if (hasYoutube) {
+      withVideo.add(row.id);
+      sourceLabel.set(row.id, "YouTube");
     }
   }
-  return { known: true, withVideo };
+  return { known: true, withVideo, sourceLabel };
 }
 
 export async function createDirectUpload(input: {
@@ -137,12 +185,27 @@ export async function syncDirectUpload(input: {
   const stored = encodeMuxAssetId(asset.id);
   if (!stored) return { state: "error", message: "معرّف الفيديو القادم من Mux غير مقبول." };
 
+  // تفعيل مصدر Mux دون حذف أصول غير ذات صلة لاحقًا؛ يُصفَّر يوتيوب لأن المصدر النشط أصبح Mux.
   const { error } = await service
     .from("lessons")
-    .update({ video_asset_id: stored })
+    .update({
+      video_asset_id: stored,
+      video_source: "mux",
+      youtube_video_id: null,
+    })
     .eq("id", input.lessonId)
     .eq("semester_id", input.semesterId);
-  if (error) return { state: "error", message: "تعذر حفظ ربط الفيديو بالدرس." };
+  if (error) {
+    // توافق خلفي قبل تطبيق هجرة يوتيوب
+    const fallback = await service
+      .from("lessons")
+      .update({ video_asset_id: stored })
+      .eq("id", input.lessonId)
+      .eq("semester_id", input.semesterId);
+    if (fallback.error) {
+      return { state: "error", message: "تعذر حفظ ربط الفيديو بالدرس." };
+    }
+  }
 
   if (verdict.phase === "ready") {
     return { state: "ready", message: "الفيديو جاهز والتشغيل موقّع فقط." };
@@ -156,10 +219,47 @@ export type LessonVideoPhase = "unconfigured" | "none" | "processing" | "ready" 
 export async function lessonMayBePublished(
   lessonId: string,
 ): Promise<{ ok: true } | { ok: false; message: string }> {
-  const assetId = await readStoredAssetId(lessonId);
-  if (assetId === "unavailable") {
+  const service = createServiceRoleClient();
+  if (!service) {
     return { ok: false, message: "تعذر التحقق من ربط الفيديو قبل النشر." };
   }
+
+  const withYoutube = await service
+    .from("lessons")
+    .select("video_asset_id, video_source, youtube_video_id")
+    .eq("id", lessonId)
+    .maybeSingle();
+
+  let videoSource: string | null = null;
+  let youtubeId: string | null = null;
+  let assetRaw: string | null = null;
+
+  if (!withYoutube.error && withYoutube.data) {
+    videoSource = withYoutube.data.video_source ?? null;
+    youtubeId = withYoutube.data.youtube_video_id ?? null;
+    assetRaw = withYoutube.data.video_asset_id ?? null;
+  } else {
+    const assetId = await readStoredAssetId(lessonId);
+    if (assetId === "unavailable") {
+      return { ok: false, message: "تعذر التحقق من ربط الفيديو قبل النشر." };
+    }
+    assetRaw = assetId;
+  }
+
+  if (
+    videoSource === "youtube" ||
+    (typeof youtubeId === "string" && /^[A-Za-z0-9_-]{11}$/.test(youtubeId))
+  ) {
+    if (typeof youtubeId === "string" && /^[A-Za-z0-9_-]{11}$/.test(youtubeId)) {
+      return { ok: true };
+    }
+    return {
+      ok: false,
+      message: "مصدر يوتيوب مفعّل لكن معرّف الفيديو غير صالح.",
+    };
+  }
+
+  const assetId = decodeMuxAssetId(assetRaw);
   if (!assetId) return { ok: true };
 
   const phase = await describeStoredVideo(lessonId);

@@ -147,6 +147,16 @@ export function ExamEditor({
                 />
               </label>
             </div>
+            <label className="mt-3 flex items-start gap-2 text-xs text-white/65">
+              <input
+                type="checkbox"
+                name="releaseModelAnswers"
+                value="1"
+                defaultChecked={exam.releaseModelAnswers}
+                className="mt-0.5 accent-secondary"
+              />
+              إظهار نموذج الإجابة للطالب بعد اعتماد ونشر النتيجة
+            </label>
           </MutationForm>
         </div>
 
@@ -157,7 +167,7 @@ export function ExamEditor({
             description={
               exam.isPublished
                 ? "لن يستطيع الطلاب بدء محاولات جديدة. المحاولات السابقة تبقى."
-                : "سيظهر للطلاب المشتركين فقط إذا اكتملت الأسئلة: 4 خيارات وإجابة صحيحة واحدة لكل سؤال."
+                : "سيظهر للطلاب المشتركين فقط بعد اكتمال التحقق: اختيار من متعدد (≥2 خيارات وإجابة صحيحة)، صح/خطأ، أو مقالي بدرجات محددة."
             }
             confirmLabel={exam.isPublished ? "تأكيد إلغاء النشر" : "تأكيد النشر"}
             danger={exam.isPublished}
@@ -167,7 +177,12 @@ export function ExamEditor({
       </div>
 
       <div className="space-y-3">
-        <h4 className="text-sm font-semibold text-white">الأسئلة ({exam.questions.length})</h4>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h4 className="text-sm font-semibold text-white">الأسئلة ({exam.questions.length})</h4>
+          <p className="text-xs text-white/55">
+            مجموع الدرجات: <span className="text-white">{exam.totalPoints}</span>
+          </p>
+        </div>
         {exam.questions.map((question, index) => (
           <QuestionEditor
             key={question.id}

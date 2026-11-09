@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { LockedLessonState } from "@/components/learning/LockedLessonState";
 import { ProtectedMuxPlayer } from "@/components/learning/ProtectedMuxPlayer";
+import { YoutubeEmbedPlayer } from "@/components/learning/YoutubeEmbedPlayer";
 import { LearningProgress } from "@/components/learning/LearningProgress";
 import type {
   LessonDetailSafe,
@@ -62,13 +63,24 @@ export function LessonVideoPlayer({
           </p>
         </div>
       ) : playback.status === "authorized" ? (
-        <div className="space-y-2">
-          <p className="text-xs text-white/45">جارٍ تجهيز التشغيل الموقّع والمؤقت.</p>
+        <div className="space-y-2" key={`${lesson.id}-${playback.source}`}>
+          <p className="text-xs text-white/45">
+            {playback.source === "youtube"
+              ? "تشغيل يوتيوب داخل الصفحة (حماية أضعف من Mux)."
+              : "جارٍ تجهيز التشغيل الموقّع والمؤقت."}
+          </p>
           <div className="overflow-hidden rounded-2xl border border-white/10 bg-black">
-            <ProtectedMuxPlayer
-              playbackId={playback.muxPlaybackId}
-              token={playback.muxPlaybackToken}
-            />
+            {playback.source === "youtube" ? (
+              <YoutubeEmbedPlayer
+                videoId={playback.youtubeVideoId}
+                title={lesson.title}
+              />
+            ) : (
+              <ProtectedMuxPlayer
+                playbackId={playback.muxPlaybackId}
+                token={playback.muxPlaybackToken}
+              />
+            )}
           </div>
         </div>
       ) : (

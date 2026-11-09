@@ -71,10 +71,12 @@ export function CourseExperience({
   const searchParams = useSearchParams();
   const selectedLessonId = searchParams.get("lesson");
   const wantsSubscribe = searchParams.get("subscribe") === "1";
+  const watching = Boolean(selectedLessonId);
 
   const [loaded, setLoaded] = useState<LoadedPlayback | null>(null);
   const [pending, startTransition] = useTransition();
   const [purchaseOpened, setPurchaseOpened] = useState(false);
+  const [infoOpen, setInfoOpen] = useState(false);
   const showPurchase =
     purchaseOpened ||
     (wantsSubscribe && !course.hasAccess && !isAdminPreview);
@@ -120,17 +122,18 @@ export function CourseExperience({
     }
 
     let cancelled = false;
+    const lessonId = selectedLessonId;
     startTransition(async () => {
       const result = await loadCourseLessonPlaybackAction(
-        selectedLessonId,
+        lessonId,
         course.courseId,
       );
       if (cancelled) return;
       if (!result.ok) {
         setLoaded({
-          lessonId: selectedLessonId,
+          lessonId,
           lesson: {
-            id: selectedLessonId,
+            id: lessonId,
             semesterId: "",
             courseId: course.courseId,
             courseTitle: course.title,
@@ -146,7 +149,7 @@ export function CourseExperience({
           },
           playback: {
             status: "unavailable",
-            lessonId: selectedLessonId,
+            lessonId,
             message: result.message,
           },
           errorMessage: result.message,
@@ -154,7 +157,7 @@ export function CourseExperience({
         return;
       }
       setLoaded({
-        lessonId: selectedLessonId,
+        lessonId,
         lesson: result.lesson,
         playback: result.playback,
         errorMessage: null,
@@ -175,9 +178,20 @@ export function CourseExperience({
   function selectLesson(item: CourseContentItem) {
     if (!isVideoItem(item)) return;
     if (item.locked && !isAdminPreview) return;
+    if (item.id !== selectedLessonId) {
+      setLoaded(null);
+    }
     const params = new URLSearchParams(searchParams.toString());
     params.set("lesson", item.id);
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }
+
+  function clearLessonSelection() {
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("lesson");
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+    setLoaded(null);
   }
 
   const matchedLoad =
@@ -202,6 +216,82 @@ export function CourseExperience({
 
   const priceLabel = formatPrice(priceEgp ?? products[0]?.priceEgp ?? null);
   const loginSubscribeHref = `/login?next=${encodeURIComponent(`${pathname}?subscribe=1`)}`;
+
+  const subscribeBlock = !isAdminPreview ? (
+    <div id="purchase" className="space-y-3">
+      {course.hasAccess || subscribeState === "enrolled" ? (
+        <div className="rounded-xl border border-emerald-400/30 bg-emerald-500/15 px-4 py-3 text-center text-sm font-semibold text-emerald-100">
+          أنت مشترك في الكورس
+        </div>
+      ) : subscribeState === "pending" ? (
+        <div className="rounded-xl border border-amber-400/30 bg-amber-400/15 px-4 py-3 text-center text-sm font-semibold text-amber-50">
+          طلب الاشتراك قيد المراجعة
+        </div>
+      ) : subscribeState === "login_required" ? (
+        <Link
+          href={loginSubscribeHref}
+          className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-white shadow-[0_0_24px_rgba(124,58,237,0.3)] transition hover:bg-secondary"
+        >
+          اشترك الآن
+        </Link>
+      ) : subscribeState === "available" ? (
+        <>
+          <button
+            type="button"
+            onClick={() => setPurchaseOpened(true)}
+            className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-white shadow-[0_0_24px_rgba(124,58,237,0.3)] transition hover:bg-secondary"
+          >
+            اشترك الآن
+          </button>
+          {showPurchase ? (
+            products.length > 0 ? (
+              <PurchaseForm products={products} />
+            ) : (
+              <div className="rounded-2xl border border-amber-400/20 bg-amber-400/5 p-4 text-sm text-amber-100">
+                لا يوجد سعر مضبوط لهذا الكورس حاليًا. تواصل مع المالك.
+              </div>
+            )
+          ) : null}
+        </>
+      ) : (
+        <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-center text-sm text-white/55">
+          الاشتراك غير متاح حاليًا
+        </div>
+      )}
+    </div>
+  ) : (
+    <div className="rounded-2xl border border-white/10 bg-background/60 p-4 text-xs leading-6 text-white/55">
+      اختيار درس في المعاينة يعرض تخطيط التشغيل فقط دون تجاوز أمان Mux.
+    </div>
+  );
+
+  const courseInfoCard = (
+    <div className="rounded-2xl border border-white/10 bg-surface p-4">
+      <h3 className="text-sm font-semibold text-white">{course.title}</h3>
+      <dl className="mt-3 space-y-2 text-sm">
+        <div className="flex items-center justify-between gap-3">
+          <dt className="text-white/50">الترم الدراسي</dt>
+          <dd className="text-white/85">
+            {academicSemesterLabel(course.academicSemester)}
+          </dd>
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <dt className="text-white/50">الأقسام</dt>
+          <dd className="text-white/85">{course.sections.length}</dd>
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <dt className="text-white/50">سعر الكورس</dt>
+          <dd className="font-semibold text-light-purple">
+            {priceLabel ?? "غير مضبوط"}
+          </dd>
+        </div>
+      </dl>
+      <p className="mt-3 text-xs leading-6 text-white/45">
+        الاشتراك في الكورس يفتح كل المحتوى المنشور داخله. لا شراء منفصل للأقسام أو
+        الدروس أو الامتحانات.
+      </p>
+    </div>
+  );
 
   return (
     <div className="space-y-5 overflow-x-hidden">
@@ -272,117 +362,114 @@ export function CourseExperience({
       </header>
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,0.7fr)_minmax(280px,0.3fr)]">
-        <div className="order-1 min-w-0 space-y-5">
-          <InlineCoursePlayer
-            courseTitle={course.title}
-            thumbnailPath={course.thumbnailPath}
-            selectedLessonId={selectedLessonId}
-            loading={playerLoading}
-            lesson={playerLesson}
-            playback={playerPlayback}
-            errorMessage={playerError}
-            previewMode={isPreview}
-            hasAccess={course.hasAccess}
-          />
-
-          <div>
-            <h2 className="text-base font-semibold text-white">محتويات الكورس</h2>
-            <p className="mt-1 text-xs text-white/50">
-              {course.hasAccess
-                ? "اضغط «مشاهدة» لفتح الفيديو في اللوحة الرئيسية."
-                : "تصفح الأقسام المنشورة. المحتوى المدفوع يظهر مقفلًا حتى الاشتراك."}
-            </p>
-            <div className="mt-3">
+        {/* اللوحة الرئيسية يمينًا في RTL ≈ 70% */}
+        <div
+          className={`min-w-0 space-y-5 ${
+            watching ? "order-1" : "order-2 lg:order-1"
+          }`}
+        >
+          {watching ? (
+            <InlineCoursePlayer
+              selectedLessonId={selectedLessonId}
+              loading={playerLoading}
+              lesson={playerLesson}
+              playback={playerPlayback}
+              errorMessage={playerError}
+              previewMode={isPreview}
+            />
+          ) : (
+            <div className="space-y-3">
+              <div>
+                <h2 className="text-base font-semibold text-white">
+                  محتويات الكورس
+                </h2>
+                <p className="mt-1 text-xs text-white/50">
+                  {course.hasAccess
+                    ? "اضغط «مشاهدة» لفتح الفيديو في هذه اللوحة دون مغادرة الصفحة."
+                    : "تصفح الأقسام المنشورة. المحتوى المدفوع يظهر مقفلًا حتى الاشتراك."}
+                </p>
+              </div>
               <CourseCurriculum
                 sections={course.sections}
                 activeItemId={selectedLessonId}
                 onSelectItem={selectLesson}
                 allowLockedSelection={isAdminPreview}
+                variant="main"
               />
             </div>
-          </div>
+          )}
         </div>
 
-        <aside className="order-2 min-w-0 space-y-4 lg:sticky lg:top-24 lg:self-start">
-          <CourseThumbnail
-            title={course.title}
-            thumbnailPath={course.thumbnailPath}
-            className="aspect-[16/10] w-full"
-            priority
-          />
+        {/* الشريط الجانبي يسارًا في RTL ≈ 30% */}
+        <aside
+          className={`min-w-0 space-y-4 lg:sticky lg:top-24 lg:self-start ${
+            watching ? "order-2" : "order-1 lg:order-2"
+          }`}
+        >
+          {watching ? (
+            <>
+              <button
+                type="button"
+                onClick={clearLessonSelection}
+                className="inline-flex w-full items-center justify-center rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-medium text-white transition hover:border-primary/40 hover:bg-primary/10"
+              >
+                العودة إلى محتويات الكورس
+              </button>
 
-          <div className="rounded-2xl border border-white/10 bg-surface p-4">
-            <h3 className="text-sm font-semibold text-white">{course.title}</h3>
-            <dl className="mt-3 space-y-2 text-sm">
-              <div className="flex items-center justify-between gap-3">
-                <dt className="text-white/50">الترم الدراسي</dt>
-                <dd className="text-white/85">
-                  {academicSemesterLabel(course.academicSemester)}
-                </dd>
+              <div>
+                <h2 className="text-sm font-semibold text-white">منهج الكورس</h2>
+                <p className="mt-1 text-xs text-white/50">
+                  بدّل بين الدروس من هنا دون إعادة تحميل الصفحة.
+                </p>
+                <div className="mt-3">
+                  <CourseCurriculum
+                    sections={course.sections}
+                    activeItemId={selectedLessonId}
+                    onSelectItem={selectLesson}
+                    allowLockedSelection={isAdminPreview}
+                    variant="sidebar"
+                  />
+                </div>
               </div>
-              <div className="flex items-center justify-between gap-3">
-                <dt className="text-white/50">الأقسام</dt>
-                <dd className="text-white/85">{course.sections.length}</dd>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <dt className="text-white/50">سعر الكورس</dt>
-                <dd className="font-semibold text-light-purple">
-                  {priceLabel ?? "غير مضبوط"}
-                </dd>
-              </div>
-            </dl>
-            <p className="mt-3 text-xs leading-6 text-white/45">
-              الاشتراك في الكورس يفتح كل المحتوى المنشور داخله. لا شراء منفصل
-              للأقسام أو الدروس أو الامتحانات.
-            </p>
-          </div>
 
-          {!isAdminPreview ? (
-            <div id="purchase" className="space-y-3">
-              {course.hasAccess || subscribeState === "enrolled" ? (
-                <div className="rounded-xl border border-emerald-400/30 bg-emerald-500/15 px-4 py-3 text-center text-sm font-semibold text-emerald-100">
-                  أنت مشترك في الكورس
-                </div>
-              ) : subscribeState === "pending" ? (
-                <div className="rounded-xl border border-amber-400/30 bg-amber-400/15 px-4 py-3 text-center text-sm font-semibold text-amber-50">
-                  طلب الاشتراك قيد المراجعة
-                </div>
-              ) : subscribeState === "login_required" ? (
-                <Link
-                  href={loginSubscribeHref}
-                  className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-white shadow-[0_0_24px_rgba(124,58,237,0.3)] transition hover:bg-secondary"
+              <div className="rounded-2xl border border-white/10 bg-surface">
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-between gap-2 px-4 py-3 text-start text-sm text-white/80"
+                  aria-expanded={infoOpen}
+                  onClick={() => setInfoOpen((open) => !open)}
                 >
-                  اشترك الآن
-                </Link>
-              ) : subscribeState === "available" ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => setPurchaseOpened(true)}
-                    className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-white shadow-[0_0_24px_rgba(124,58,237,0.3)] transition hover:bg-secondary"
-                  >
-                    اشترك الآن
-                  </button>
-                  {showPurchase ? (
-                    products.length > 0 ? (
-                      <PurchaseForm products={products} />
-                    ) : (
-                      <div className="rounded-2xl border border-amber-400/20 bg-amber-400/5 p-4 text-sm text-amber-100">
-                        لا يوجد سعر مضبوط لهذا الكورس حاليًا. تواصل مع المالك.
-                      </div>
-                    )
-                  ) : null}
-                </>
-              ) : (
-                <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-center text-sm text-white/55">
-                  الاشتراك غير متاح حاليًا
-                </div>
-              )}
-            </div>
+                  <span>معلومات الكورس والاشتراك</span>
+                  <span className="text-xs text-light-purple">
+                    {infoOpen ? "إخفاء" : "عرض"}
+                  </span>
+                </button>
+                {infoOpen ? (
+                  <div className="space-y-3 border-t border-white/10 p-4">
+                    <CourseThumbnail
+                      title={course.title}
+                      thumbnailPath={course.thumbnailPath}
+                      className="aspect-[16/10] w-full"
+                      sizes="(max-width: 1024px) 100vw, 320px"
+                    />
+                    {courseInfoCard}
+                    {subscribeBlock}
+                  </div>
+                ) : null}
+              </div>
+            </>
           ) : (
-            <div className="rounded-2xl border border-white/10 bg-background/60 p-4 text-xs leading-6 text-white/55">
-              اختيار درس في المعاينة يعرض تخطيط التشغيل فقط دون تجاوز أمان Mux.
-            </div>
+            <>
+              <CourseThumbnail
+                title={course.title}
+                thumbnailPath={course.thumbnailPath}
+                className="aspect-[16/10] w-full"
+                sizes="(max-width: 1024px) 100vw, 320px"
+                priority
+              />
+              {courseInfoCard}
+              {subscribeBlock}
+            </>
           )}
         </aside>
       </div>

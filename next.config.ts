@@ -14,10 +14,10 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ["@mux/mux-node"],
   cacheComponents: true,
   partialPrefetching: true,
-  // هامش أمان فقط؛ رفع صور الغلاف يتم مباشرة إلى Storage وليس عبر جسم الـ Action.
+  // صور إثبات التحويل تصل عبر Server Action حتى 5MB (+ هامش للحقول).
   experimental: {
     serverActions: {
-      bodySizeLimit: "3mb",
+      bodySizeLimit: "6mb",
     },
   },
   images: {

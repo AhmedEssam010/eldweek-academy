@@ -1,8 +1,12 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { submitPurchaseRequestAction } from "@/lib/learning/purchase-actions";
+import {
+  PAYMENT_RECEIPT_MAX_BYTES,
+  isAllowedReceiptMime,
+} from "@/lib/learning/payment-receipts";
 
 type ProductOption = {
   productId: string;
@@ -23,25 +27,76 @@ export function PurchaseForm({ products }: PurchaseFormProps) {
   const [selectedProduct, setSelectedProduct] = useState(
     products[0]?.productId ?? "",
   );
+  const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  const [localError, setLocalError] = useState<string | null>(null);
 
   const selected = products.find((p) => p.productId === selectedProduct);
+  const previewUrl = useMemo(() => {
+    if (!receiptFile) return null;
+    return URL.createObjectURL(receiptFile);
+  }, [receiptFile]);
+
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
+
+  function handleReceiptChange(fileList: FileList | null) {
+    setLocalError(null);
+    setMessage(null);
+    const file = fileList?.[0] ?? null;
+    if (!file) {
+      setReceiptFile(null);
+      return;
+    }
+    if (!isAllowedReceiptMime(file.type)) {
+      setReceiptFile(null);
+      setLocalError("الصيغ المسموحة: JPG أو JPEG أو PNG أو WebP.");
+      return;
+    }
+    if (file.size > PAYMENT_RECEIPT_MAX_BYTES) {
+      setReceiptFile(null);
+      setLocalError("حجم الصورة يجب ألا يتجاوز 5 ميجابايت.");
+      return;
+    }
+    setReceiptFile(file);
+  }
 
   return (
     <div className="rounded-2xl border border-primary/20 bg-primary/5 p-5">
       <h3 className="text-base font-semibold text-white">طلب شراء الكورس</h3>
       <p className="mt-1 text-sm text-white/60">
-        شراء الكورس يفتح كل أقسامه ودروسه وامتحاناته المنشورة. لا يوجد شراء
-        إضافي داخل الكورس. التحقق يدوي من المالك.
+        شراء الكورس يفتح كل أقسامه ودروسه وامتحاناته المنشورة. أرفق صورة إثبات
+        التحويل ليراجعها المالك يدويًا.
       </p>
 
       <form
         className="mt-4 space-y-4"
-        action={(formData) => {
+        onSubmit={(event) => {
+          event.preventDefault();
+          setLocalError(null);
+          setMessage(null);
+
+          if (!receiptFile) {
+            setOk(false);
+            setLocalError("صورة إثبات التحويل مطلوبة.");
+            return;
+          }
+          if (pending) return;
+
+          const form = event.currentTarget;
+          const formData = new FormData(form);
+          formData.set("receiptImage", receiptFile);
+
           startTransition(async () => {
             const result = await submitPurchaseRequestAction(formData);
             setOk(result.ok);
             setMessage(result.message);
-            if (result.ok) router.refresh();
+            if (result.ok) {
+              setReceiptFile(null);
+              router.refresh();
+            }
           });
         }}
       >
@@ -86,43 +141,90 @@ export function PurchaseForm({ products }: PurchaseFormProps) {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-white/80">
-            رقم هاتف المرسل (بالصيغة الدولية)
+          <label
+            htmlFor="senderPhone"
+            className="block text-sm font-medium text-white/80"
+          >
+            رقم الموبايل المحوّل منه
           </label>
           <input
+            id="senderPhone"
             type="tel"
             name="senderPhone"
-            placeholder="+2010xxxxxxxx"
+            inputMode="tel"
+            autoComplete="tel"
+            placeholder="010xxxxxxxx"
             dir="ltr"
             className="mt-1 w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2.5 text-sm text-white placeholder:text-white/40"
             required
           />
           <p className="mt-1 text-xs text-white/40">
-            اكتب الرقم بالصيغة الدولية، مثل +20 ثم رقم الموبايل.
+            يُقبل 010 / 011 / 012 / 015 ويُحوَّل تلقائيًا إلى الصيغة الدولية.
           </p>
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-white/80">
-            مرجع التحويل (رقم العملية)
+          <label
+            htmlFor="receiptImage"
+            className="block text-sm font-medium text-white/80"
+          >
+            صورة إثبات التحويل
           </label>
           <input
-            type="text"
-            name="transactionRef"
-            placeholder="رقم العملية أو مرجع التحويل"
-            className="mt-1 w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2.5 text-sm text-white placeholder:text-white/40"
-            required
-            minLength={3}
+            id="receiptImage"
+            type="file"
+            accept="image/jpeg,image/jpg,image/png,image/webp"
+            disabled={pending}
+            className="mt-1 block w-full text-sm text-white/70 file:me-3 file:rounded-lg file:border-0 file:bg-primary file:px-3 file:py-2 file:text-sm file:font-medium file:text-white disabled:opacity-60"
+            onChange={(event) => handleReceiptChange(event.target.files)}
           />
+          <p className="mt-1 text-xs text-white/40">
+            JPG أو PNG أو WebP · حد أقصى 5 ميجابايت · مطلوبة
+          </p>
+
+          {previewUrl ? (
+            <div className="mt-3 overflow-hidden rounded-xl border border-white/10 bg-background/40">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={previewUrl}
+                alt="معاينة صورة التحويل"
+                className="max-h-64 w-full object-contain bg-black/40"
+              />
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-white/10 px-3 py-2">
+                <p className="truncate text-xs text-white/55" dir="ltr">
+                  {receiptFile?.name}
+                </p>
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() => {
+                    setReceiptFile(null);
+                    setLocalError(null);
+                  }}
+                  className="rounded-lg border border-white/15 px-2.5 py-1 text-xs text-white/80 hover:bg-white/5 disabled:opacity-60"
+                >
+                  استبدال الصورة
+                </button>
+              </div>
+            </div>
+          ) : null}
         </div>
 
         <button
           type="submit"
-          disabled={pending}
+          disabled={pending || !receiptFile}
           className="w-full rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-secondary disabled:opacity-60"
         >
-          {pending ? "جارٍ الإرسال..." : "إرسال طلب الشراء"}
+          {pending
+            ? "جارٍ رفع صورة التحويل وإرسال الطلب..."
+            : "إرسال طلب الاشتراك"}
         </button>
+
+        {localError ? (
+          <p className="rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2 text-xs leading-6 text-red-200">
+            {localError}
+          </p>
+        ) : null}
 
         {message ? (
           <p

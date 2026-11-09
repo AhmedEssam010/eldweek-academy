@@ -29,8 +29,8 @@ export function LessonEditor({ lesson, canEdit }: LessonEditorProps) {
       <div>
         <h3 className="text-base font-semibold text-white">تحرير الدرس</h3>
         <p className="mt-1 text-xs leading-6 text-white/50">
-          الدرس يُحفظ مسودة حتى تنشره. إذا كان فيه فيديو، لن يُنشر إلا بعد
-          اكتمال معالجة Mux وبسياسة تشغيل موقّعة.
+          الدرس يُحفظ مسودة حتى تنشره. فيديو Mux يحتاج اكتمال المعالجة
+          والتوقيع قبل النشر. فيديو يوتيوب يُنشر إن كان المعرّف صالحًا.
         </p>
       </div>
 

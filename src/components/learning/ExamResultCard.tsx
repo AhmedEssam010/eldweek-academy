@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { ExamAttemptSummary } from "@/lib/learning/types";
 
 type ExamResultCardProps = {
@@ -6,13 +7,18 @@ type ExamResultCardProps = {
 
 export function ExamResultCard({ attempt }: ExamResultCardProps) {
   const statusLabel =
-    attempt.status === "submitted"
-      ? "مُسلَّم"
-      : attempt.status === "expired"
-        ? "انتهت المهلة"
-        : attempt.status === "abandoned"
-          ? "متروك"
-          : "قيد التنفيذ";
+    attempt.gradingStatus === "awaiting_essay" || attempt.gradingStatus === "draft"
+      ? "بانتظار التصحيح"
+      : attempt.status === "submitted"
+        ? "مُسلَّم"
+        : attempt.status === "expired"
+          ? "انتهت المهلة"
+          : attempt.status === "abandoned"
+            ? "متروك"
+            : "قيد التنفيذ";
+
+  const pendingEssay =
+    attempt.gradingStatus === "awaiting_essay" || attempt.gradingStatus === "draft";
 
   return (
     <article className="rounded-2xl border border-white/10 bg-surface p-4">
@@ -33,28 +39,57 @@ export function ExamResultCard({ attempt }: ExamResultCardProps) {
         </span>
       </div>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-3">
-        <div className="rounded-xl border border-white/10 bg-background/40 p-3">
-          <p className="text-xs text-white/50">الدرجة</p>
-          <p className="mt-1 text-lg font-semibold text-white">
-            {attempt.score === null ? "—" : `${attempt.score}%`}
-          </p>
+      {pendingEssay ? (
+        <p className="mt-4 text-sm leading-7 text-amber-100">
+          تم تسليم الامتحان بنجاح، وجارٍ تصحيح الأسئلة المقالية.
+          {attempt.objectiveEarned != null ? (
+            <span className="mt-1 block text-xs text-white/55">
+              مجموع الموضوعي حتى الآن: {attempt.objectiveEarned}
+              {attempt.totalPoints != null ? ` من ${attempt.totalPoints}` : ""}
+            </span>
+          ) : null}
+        </p>
+      ) : (
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <div className="rounded-xl border border-white/10 bg-background/40 p-3">
+            <p className="text-xs text-white/50">الدرجة</p>
+            <p className="mt-1 text-lg font-semibold text-white">
+              {!attempt.resultsReleased || attempt.score === null
+                ? "—"
+                : `${attempt.score}%`}
+            </p>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-background/40 p-3">
+            <p className="text-xs text-white/50">النتيجة</p>
+            <p className="mt-1 text-lg font-semibold text-white">
+              {attempt.passed === null
+                ? "—"
+                : attempt.passed
+                  ? "ناجح"
+                  : "غير ناجح"}
+            </p>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-background/40 p-3">
+            <p className="text-xs text-white/50">التفصيل</p>
+            <p className="mt-1 text-xs text-white/70">
+              {attempt.objectiveEarned != null || attempt.essayEarned != null
+                ? `موضوعي ${attempt.objectiveEarned ?? 0} · مقالي ${attempt.essayEarned ?? 0}`
+                : "—"}
+            </p>
+          </div>
         </div>
-        <div className="rounded-xl border border-white/10 bg-background/40 p-3">
-          <p className="text-xs text-white/50">النتيجة</p>
-          <p className="mt-1 text-lg font-semibold text-white">
-            {attempt.passed === null
-              ? "—"
-              : attempt.passed
-                ? "ناجح"
-                : "غير ناجح"}
-          </p>
+      )}
+
+      {attempt.resultsReleased ? (
+        <div className="mt-4">
+          <Link
+            href={`/student/results/${attempt.id}`}
+            className="inline-flex rounded-xl border border-secondary/40 bg-secondary/10 px-3 py-2 text-xs font-medium text-white hover:bg-secondary/20"
+          >
+            مراجعة الإجابات والدرجات
+          </Link>
         </div>
-        <div className="rounded-xl border border-white/10 bg-background/40 p-3">
-          <p className="text-xs text-white/50">المحاولة</p>
-          <p className="mt-1 text-xs text-white/70">{attempt.id.slice(0, 8)}…</p>
-        </div>
-      </div>
+      ) : null}
     </article>
   );
 }

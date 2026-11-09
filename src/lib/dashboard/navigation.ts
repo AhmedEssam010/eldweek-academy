@@ -35,6 +35,11 @@ export const adminNavItems: DashboardNavItem[] = [
     label: "الامتحانات",
     description: "امتحانات كل كورس",
   },
+  {
+    href: "/admin/grading",
+    label: "تصحيح الامتحانات",
+    description: "تصحيح المقالات واعتماد النتائج",
+  },
 ];
 
 export const teacherNavItems: DashboardNavItem[] = [

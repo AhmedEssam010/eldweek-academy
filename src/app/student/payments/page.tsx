@@ -68,8 +68,7 @@ export default async function StudentPaymentsPage() {
               </div>
               {payment.status === "pending" ? (
                 <p className="mt-2 text-xs text-amber-200/70">
-                  طلبك قيد المراجعة. سيُعتمد يدويًا من المالك بعد التحقق من
-                  التحويل.
+                  طلب الاشتراك قيد المراجعة
                 </p>
               ) : null}
               {payment.rejectionReason ? (

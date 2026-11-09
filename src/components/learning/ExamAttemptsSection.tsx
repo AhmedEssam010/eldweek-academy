@@ -9,6 +9,13 @@ const statusLabel: Record<string, string> = {
   abandoned: "متروكة",
 };
 
+const gradingLabel: Record<string, string> = {
+  awaiting_essay: "بانتظار التصحيح",
+  draft: "مسودة تصحيح",
+  finalized: "معتمد",
+  not_applicable: "",
+};
+
 export async function ExamAttemptsSection({ examId }: { examId: string }) {
   const attempts = await listExamAttempts(examId);
 
@@ -33,6 +40,9 @@ export async function ExamAttemptsSection({ examId }: { examId: string }) {
               <span className="text-white">{attempt.studentName}</span>
               <span className="text-xs text-white/55">
                 {statusLabel[attempt.status] ?? attempt.status}
+                {gradingLabel[attempt.gradingStatus]
+                  ? ` · ${gradingLabel[attempt.gradingStatus]}`
+                  : ""}
                 {attempt.score != null ? ` · ${attempt.score}%` : ""}
               </span>
             </li>
