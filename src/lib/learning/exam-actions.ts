@@ -19,9 +19,8 @@ function success(message: string, redirectTo?: string): CourseFormActionResult {
 
 function mapExamError(error: { code?: string; message?: string }, fallback: string) {
   const raw = `${error.code ?? ""} ${error.message ?? ""}`.toLowerCase();
-  if (raw.includes("42p01") || raw.includes("does not exist") || raw.includes("schema cache")) {
-    return "جداول الامتحانات غير مطبّقة على قاعدة البيانات بعد.";
-  }
+  // استثناءات الأعمال أولًا — كثير منها كان يُرفع بـ 23514 فيُخفى خلف رسالة القيد العامة
+  if (raw.includes("not_authenticated")) return "يجب تسجيل الدخول لتسليم الامتحان.";
   if (raw.includes("exam_not_available")) return "الامتحان غير منشور أو غير موجود.";
   if (raw.includes("exam_entitlement_required")) return "لا يوجد اشتراك نشط يخوّلك هذا الامتحان.";
   if (raw.includes("exam_max_attempts_reached")) return "استنفدت عدد المحاولات المسموح.";
@@ -30,6 +29,9 @@ function mapExamError(error: { code?: string; message?: string }, fallback: stri
   if (raw.includes("exam_has_no_questions")) return "الامتحان بلا أسئلة.";
   if (raw.includes("duplicate_question_answers")) return "تكرر سؤال في الإجابات.";
   if (raw.includes("selected_option_mismatch")) return "أحد الخيارات لا ينتمي لسؤاله.";
+  if (raw.includes("answer_question_not_in_exam")) {
+    return "أحد الأسئلة لم يعد ضمن الامتحان. حدّث الصفحة وأعد المحاولة.";
+  }
   if (raw.includes("exam_create_forbidden") || raw.includes("exam_update_forbidden") || raw.includes("exam_publish_forbidden")) {
     return "ليست لديك صلاحية إدارة امتحانات هذا الكورس.";
   }
@@ -38,8 +40,23 @@ function mapExamError(error: { code?: string; message?: string }, fallback: stri
   if (raw.includes("grading_forbidden")) return "ليست لديك صلاحية تصحيح هذا الامتحان.";
   if (raw.includes("attempt_not_gradable")) return "هذه المحاولة غير قابلة للتصحيح الآن.";
   if (raw.includes("essays_incomplete")) return "يجب تصحيح كل الأسئلة المقالية قبل الاعتماد.";
-  if (raw.includes("invalid_essay_points")) return "درجة المقال يجب أن تكون بين 0 والحد الأقصى.";
+  if (raw.includes("invalid_essay_points")) return "درجة المقال يجب أن تكون بين 0 والحد الأقصى للسؤال.";
   if (raw.includes("essay_answer_not_found")) return "إجابة المقال غير موجودة.";
+  if (raw.includes("42p01") || raw.includes("does not exist") || raw.includes("schema cache")) {
+    return "جداول أو دوال الامتحانات غير مطبّقة على قاعدة البيانات بعد. طبّق هجرة أنواع الأسئلة.";
+  }
+  if (raw.includes("42703") || raw.includes("undefined column")) {
+    return "أعمدة التصحيح غير مكتملة في قاعدة البيانات. أعد تطبيق هجرة exam_question_types.";
+  }
+  if (raw.includes("42702") || raw.includes("ambiguous")) {
+    return "تعارض أسماء أعمدة في دالة الامتحان. أعد تطبيق هجرة إصلاح التصحيح.";
+  }
+  if (raw.includes("22p02") || raw.includes("invalid input syntax")) {
+    return "بيانات الإجابة غير صالحة. حدّث الصفحة وأعد المحاولة.";
+  }
+  if (raw.includes("23514") || raw.includes("check constraint")) {
+    return "تعذر حفظ التسليم بسبب قيد في قاعدة البيانات. أعد تطبيق هجرة أنواع الأسئلة والتصحيح.";
+  }
   console.error("[exam-action]", { code: error.code, message: error.message?.slice(0, 180) });
   return fallback;
 }
@@ -527,7 +544,21 @@ export async function submitExamAttemptAction(input: {
     p_attempt_id: input.attemptId,
     p_answers: payload,
   });
-  if (error) return fail(mapExamError(error, "تعذر تسليم الامتحان."));
+  if (error) {
+    console.error("[submit-exam-attempt]", {
+      code: error.code,
+      message: error.message?.slice(0, 300),
+      details: (error as { details?: string }).details?.slice(0, 200),
+      hint: (error as { hint?: string }).hint?.slice(0, 200),
+    });
+    const mapped = mapExamError(error, "تعذر تسليم الامتحان.");
+    const technical = [error.code, error.message].filter(Boolean).join(": ").slice(0, 160);
+    return fail(
+      mapped === "تعذر تسليم الامتحان." && technical
+        ? `تعذر تسليم الامتحان. (${technical})`
+        : mapped,
+    );
+  }
 
   const row = Array.isArray(data) ? data[0] : data;
   revalidatePath(`/student/exams/${input.examId}`);
@@ -577,6 +608,15 @@ export async function saveEssayGradesDraftAction(input: {
     }));
 
   if (payload.length === 0) return fail("لا توجد درجات لحفظها.");
+
+  for (const grade of payload) {
+    if (
+      !Number.isFinite(grade.awarded_points) ||
+      grade.awarded_points < 0
+    ) {
+      return fail("درجة المقال يجب أن تكون رقمًا أكبر من أو يساوي صفر.");
+    }
+  }
 
   const { error } = await access.supabase.rpc("save_exam_essay_grades_draft", {
     p_attempt_id: input.attemptId,

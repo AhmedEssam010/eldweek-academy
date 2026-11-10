@@ -6,6 +6,7 @@
 -- الطلبات القديمة التي خزّنت رقم العملية كنص تبقى كما هي.
 -- =============================================================================
 
+
 COMMENT ON COLUMN public.payment_requests.receipt_path IS
   'مسار صورة إثبات التحويل في سلة payment-receipts (الطلبات الجديدة)، أو مرجع نصي قديم لرقم العملية (التوافق التاريخي).';
 
@@ -64,3 +65,5 @@ CREATE POLICY payment_receipts_delete
 
 -- لا UPDATE — الإيصالات غير قابلة للاستبدال بعد الرفع
 DROP POLICY IF EXISTS payment_receipts_update ON storage.objects;
+
+

@@ -182,24 +182,35 @@ export function EssayGradingForm({ detail }: EssayGradingFormProps) {
             className="rounded-xl border border-white/15 px-4 py-2.5 text-sm text-white disabled:opacity-60"
             onClick={() => {
               startTransition(async () => {
-                const grades = essays
-                  .map((essay) => {
-                    const draft = drafts[essay.answerId];
-                    const points = Number(draft?.awardedPoints);
-                    if (!draft || draft.awardedPoints === "" || !Number.isFinite(points)) {
-                      return null;
-                    }
-                    return {
-                      answerId: essay.answerId,
-                      awardedPoints: points,
-                      teacherFeedback: draft.teacherFeedback,
-                    };
-                  })
-                  .filter(Boolean) as Array<{
+                const grades: Array<{
                   answerId: string;
                   awardedPoints: number;
                   teacherFeedback: string;
-                }>;
+                }> = [];
+                for (const essay of essays) {
+                  const draft = drafts[essay.answerId];
+                  const points = Number(draft?.awardedPoints);
+                  if (!draft || draft.awardedPoints === "" || !Number.isFinite(points)) {
+                    continue;
+                  }
+                  if (points < 0 || points > essay.points) {
+                    setOk(false);
+                    setMessage(
+                      `درجة السؤال «${essay.questionText.slice(0, 40)}» يجب أن تكون بين 0 و${essay.points}.`,
+                    );
+                    return;
+                  }
+                  grades.push({
+                    answerId: essay.answerId,
+                    awardedPoints: points,
+                    teacherFeedback: draft.teacherFeedback,
+                  });
+                }
+                if (grades.length === 0) {
+                  setOk(false);
+                  setMessage("أدخل درجة واحدة على الأقل قبل حفظ المسودة.");
+                  return;
+                }
                 const result = await saveEssayGradesDraftAction({
                   attemptId: detail.attemptId,
                   courseId: detail.courseId,
@@ -241,11 +252,27 @@ export function EssayGradingForm({ detail }: EssayGradingFormProps) {
               onClick={() => {
                 setConfirmFinalize(false);
                 startTransition(async () => {
-                  const grades = essays.map((essay) => ({
-                    answerId: essay.answerId,
-                    awardedPoints: Number(drafts[essay.answerId]?.awardedPoints ?? 0),
-                    teacherFeedback: drafts[essay.answerId]?.teacherFeedback ?? "",
-                  }));
+                  const grades: Array<{
+                    answerId: string;
+                    awardedPoints: number;
+                    teacherFeedback: string;
+                  }> = [];
+                  for (const essay of essays) {
+                    const raw = drafts[essay.answerId]?.awardedPoints ?? "";
+                    const points = Number(raw);
+                    if (raw === "" || !Number.isFinite(points) || points < 0 || points > essay.points) {
+                      setOk(false);
+                      setMessage(
+                        `أكمل درجات كل المقالات بين 0 والحد الأقصى قبل الاعتماد (سؤال: ${essay.questionText.slice(0, 40)}).`,
+                      );
+                      return;
+                    }
+                    grades.push({
+                      answerId: essay.answerId,
+                      awardedPoints: points,
+                      teacherFeedback: drafts[essay.answerId]?.teacherFeedback ?? "",
+                    });
+                  }
                   const draftResult = await saveEssayGradesDraftAction({
                     attemptId: detail.attemptId,
                     courseId: detail.courseId,

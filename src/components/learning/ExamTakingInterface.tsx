@@ -7,7 +7,7 @@ import {
   startExamAttemptAction,
   submitExamAttemptAction,
 } from "@/lib/learning/exam-actions";
-import type { ExamTakingView } from "@/lib/learning/types";
+import type { ExamTakingQuestion, ExamTakingView } from "@/lib/learning/types";
 
 type ExamTakingInterfaceProps = {
   exam: ExamTakingView;
@@ -24,6 +24,16 @@ const typeLabel: Record<string, string> = {
   essay: "مقالي",
 };
 
+function isQuestionAnswered(
+  question: ExamTakingQuestion,
+  answer: AnswerState | undefined,
+) {
+  if (question.questionType === "essay") {
+    return Boolean(answer?.essayText?.trim());
+  }
+  return Boolean(answer?.optionId);
+}
+
 export function ExamTakingInterface({ exam }: ExamTakingInterfaceProps) {
   const router = useRouter();
   const [answers, setAnswers] = useState<Record<string, AnswerState>>({});
@@ -37,8 +47,47 @@ export function ExamTakingInterface({ exam }: ExamTakingInterfaceProps) {
     exam.attemptStatus === "submitted" || exam.attemptStatus === "expired",
   );
   const [gradingStatus, setGradingStatus] = useState(exam.gradingStatus);
+  const [unansweredIds, setUnansweredIds] = useState<string[]>([]);
 
   const canAnswer = Boolean(attemptId) && !closed;
+
+  function findUnanswered() {
+    return exam.questions.filter(
+      (question) => !isQuestionAnswered(question, answers[question.id]),
+    );
+  }
+
+  function focusUnanswered(missing: ExamTakingQuestion[]) {
+    if (missing.length === 0) return;
+    const first = missing[0]!;
+    const indexes = missing
+      .map((question) => exam.questions.findIndex((entry) => entry.id === question.id) + 1)
+      .filter((index) => index > 0);
+    const label =
+      indexes.length === 1
+        ? `يجب الإجابة على السؤال رقم ${indexes[0]} قبل التسليم.`
+        : `يجب الإجابة على الأسئلة رقم ${indexes.join("، ")} قبل التسليم.`;
+    setUnansweredIds(missing.map((question) => question.id));
+    setOk(false);
+    setMessage(label);
+    setConfirmOpen(false);
+    requestAnimationFrame(() => {
+      document
+        .getElementById(`exam-q-${first.id}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  }
+
+  function requestSubmit() {
+    const missing = findUnanswered();
+    if (missing.length > 0) {
+      focusUnanswered(missing);
+      return;
+    }
+    setUnansweredIds([]);
+    setMessage(null);
+    setConfirmOpen(true);
+  }
 
   return (
     <div className="space-y-5">
@@ -89,7 +138,7 @@ export function ExamTakingInterface({ exam }: ExamTakingInterfaceProps) {
             <button
               type="button"
               disabled={pending}
-              onClick={() => setConfirmOpen(true)}
+              onClick={requestSubmit}
               className="rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
             >
               تسليم الإجابات
@@ -111,6 +160,11 @@ export function ExamTakingInterface({ exam }: ExamTakingInterfaceProps) {
               disabled={pending}
               className="rounded-xl bg-primary px-4 py-2 text-sm text-white disabled:opacity-60"
               onClick={() => {
+                const missing = findUnanswered();
+                if (missing.length > 0) {
+                  focusUnanswered(missing);
+                  return;
+                }
                 setConfirmOpen(false);
                 startTransition(async () => {
                   const result = await submitExamAttemptAction({
@@ -126,6 +180,7 @@ export function ExamTakingInterface({ exam }: ExamTakingInterfaceProps) {
                   setMessage(result.message);
                   if (result.ok) {
                     setClosed(true);
+                    setUnansweredIds([]);
                     setGradingStatus(
                       (result.gradingStatus as ExamTakingView["gradingStatus"]) ?? null,
                     );
@@ -160,60 +215,96 @@ export function ExamTakingInterface({ exam }: ExamTakingInterfaceProps) {
       ) : null}
 
       <ol className="space-y-4">
-        {exam.questions.map((question, index) => (
-          <li key={question.id} className="rounded-2xl border border-white/10 bg-surface p-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-sm font-medium text-white">
-                {index + 1}. {question.questionText}
-                <span className="ms-2 text-xs text-white/45">({question.points} درجة)</span>
-              </p>
-              <span className="rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] text-white/55">
-                {typeLabel[question.questionType] ?? question.questionType}
-              </span>
-            </div>
-
-            {question.questionType === "essay" ? (
-              <textarea
-                rows={6}
-                disabled={!canAnswer}
-                value={answers[question.id]?.essayText ?? ""}
-                onChange={(event) =>
-                  setAnswers((prev) => ({
-                    ...prev,
-                    [question.id]: { essayText: event.target.value },
-                  }))
-                }
-                placeholder="اكتب إجابتك هنا..."
-                className="mt-3 w-full rounded-xl border border-white/15 bg-background px-4 py-3 text-sm text-white outline-none focus:border-secondary disabled:opacity-60"
-              />
-            ) : (
-              <div className="mt-3 space-y-2">
-                {question.options.map((option) => (
-                  <label
-                    key={option.id}
-                    className="flex items-start gap-2 rounded-xl border border-white/10 bg-background/40 px-3 py-2 text-sm text-white/80"
-                  >
-                    <input
-                      type="radio"
-                      name={`q-${question.id}`}
-                      value={option.id}
-                      disabled={!canAnswer}
-                      checked={answers[question.id]?.optionId === option.id}
-                      onChange={() =>
-                        setAnswers((prev) => ({
-                          ...prev,
-                          [question.id]: { optionId: option.id },
-                        }))
-                      }
-                      className="mt-1 accent-secondary"
-                    />
-                    <span>{option.optionText}</span>
-                  </label>
-                ))}
+        {exam.questions.map((question, index) => {
+          const unanswered = unansweredIds.includes(question.id);
+          return (
+            <li
+              key={question.id}
+              id={`exam-q-${question.id}`}
+              className={`rounded-2xl border bg-surface p-4 ${
+                unanswered
+                  ? "border-red-400/50 ring-1 ring-red-400/30"
+                  : "border-white/10"
+              }`}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-medium text-white">
+                  {index + 1}. {question.questionText}
+                  <span className="ms-2 text-xs text-white/45">({question.points} درجة)</span>
+                  <span className="ms-2 text-[11px] text-red-200">*</span>
+                </p>
+                <span className="rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] text-white/55">
+                  {typeLabel[question.questionType] ?? question.questionType}
+                </span>
               </div>
-            )}
-          </li>
-        ))}
+
+              {unanswered ? (
+                <p className="mt-2 text-xs text-red-200">
+                  هذا السؤال مطلوب. يجب حله قبل تسليم الامتحان.
+                </p>
+              ) : null}
+
+              {question.questionType === "essay" ? (
+                <textarea
+                  rows={6}
+                  disabled={!canAnswer}
+                  value={answers[question.id]?.essayText ?? ""}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setAnswers((prev) => ({
+                      ...prev,
+                      [question.id]: { essayText: value },
+                    }));
+                    if (value.trim()) {
+                      setUnansweredIds((prev) =>
+                        prev.filter((id) => id !== question.id),
+                      );
+                    }
+                  }}
+                  placeholder="اكتب إجابتك هنا..."
+                  className={`mt-3 w-full rounded-xl border bg-background px-4 py-3 text-sm text-white outline-none focus:border-secondary disabled:opacity-60 ${
+                    unanswered ? "border-red-400/50" : "border-white/15"
+                  }`}
+                />
+              ) : (
+                <div className="mt-3 space-y-2">
+                  {question.options.map((option) => (
+                    <label
+                      key={option.id}
+                      className={`flex items-start gap-2 rounded-xl border bg-background/40 px-3 py-2 text-sm text-white/80 ${
+                        unanswered ? "border-red-400/40" : "border-white/10"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name={`q-${question.id}`}
+                        value={option.id}
+                        disabled={!canAnswer}
+                        checked={answers[question.id]?.optionId === option.id}
+                        onChange={() => {
+                          setAnswers((prev) => ({
+                            ...prev,
+                            [question.id]: { optionId: option.id },
+                          }));
+                          setUnansweredIds((prev) =>
+                            prev.filter((id) => id !== question.id),
+                          );
+                        }}
+                        className="mt-1 accent-secondary"
+                      />
+                      <span>{option.optionText}</span>
+                    </label>
+                  ))}
+                  {question.options.length === 0 ? (
+                    <p className="text-xs text-amber-100">
+                      لا توجد خيارات لهذا السؤال. حدّث الصفحة أو تواصل مع المالك.
+                    </p>
+                  ) : null}
+                </div>
+              )}
+            </li>
+          );
+        })}
       </ol>
     </div>
   );
