@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getAuthReadiness } from "@/lib/auth/readiness";
 import type { CourseStatus } from "@/types/database";
 import type {
+  CourseMaterialListItem,
   ExamAttemptReviewView,
   ExamAttemptSummary,
   ExamEditorView,
@@ -222,11 +223,12 @@ export async function getSemesterDetail(
   LearningQueryResult<{
     semester: SemesterListItem | null;
     lessons: LessonListItem[];
+    materials: CourseMaterialListItem[];
   }>
 > {
   const access = await getClient();
   if (!access.ready || !access.supabase) {
-    return setupResult({ semester: null, lessons: [] });
+    return setupResult({ semester: null, lessons: [], materials: [] });
   }
 
   const { data: semester, error } = await access.supabase
@@ -236,12 +238,14 @@ export async function getSemesterDetail(
     .eq("course_id", courseId)
     .maybeSingle();
 
-  if (error) return unavailableResult({ semester: null, lessons: [] });
+  if (error) {
+    return unavailableResult({ semester: null, lessons: [], materials: [] });
+  }
   if (!semester) {
     return {
       availability: "empty",
       message: "لم يُعثر على الترم ضمن هذا الكورس.",
-      data: { semester: null, lessons: [] },
+      data: { semester: null, lessons: [], materials: [] },
     };
   }
 
@@ -297,6 +301,30 @@ export async function getSemesterDetail(
     item.examCount = examCounts.get(item.id) ?? 0;
   }
 
+  const { data: materialRows, error: materialsError } = await access.supabase
+    .from("course_materials")
+    .select(
+      "id, course_id, semester_id, title, description, file_size_bytes, original_filename, sort_order, is_published",
+    )
+    .eq("semester_id", semesterId)
+    .eq("course_id", courseId)
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: true });
+
+  const materials: CourseMaterialListItem[] = materialsError
+    ? []
+    : (materialRows ?? []).map((row) => ({
+        id: row.id,
+        courseId: row.course_id,
+        semesterId: row.semester_id,
+        title: row.title,
+        description: row.description ?? "",
+        fileSizeBytes: Number(row.file_size_bytes) || 0,
+        originalFilename: row.original_filename ?? "",
+        sortOrder: row.sort_order,
+        isPublished: Boolean(row.is_published),
+      }));
+
   return {
     availability: "ready",
     message: "تم جلب الترم ودروسه.",
@@ -311,6 +339,7 @@ export async function getSemesterDetail(
         examsCount: 0,
       },
       lessons: lessonItems,
+      materials,
     },
   };
 }

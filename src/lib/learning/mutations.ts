@@ -223,6 +223,40 @@ export async function deleteSectionAction(
     return fail("لا يمكن حذف قسم يحتوي امتحانات. انقل الامتحانات أو احذفها أولًا.");
   }
 
+  const { count: materialCount, error: materialsError } = await access.supabase
+    .from("course_materials")
+    .select("id", { count: "exact", head: true })
+    .eq("semester_id", sectionId);
+
+  if (materialsError) {
+    if (
+      !String(materialsError.message ?? "")
+        .toLowerCase()
+        .includes("does not exist")
+    ) {
+      return fail("تعذر التحقق من مواد PDF في القسم قبل الحذف.");
+    }
+  } else if ((materialCount ?? 0) > 0) {
+    return fail("لا يمكن حذف قسم يحتوي ملفات PDF. احذف المواد أولًا.");
+  }
+
+  const { count: homeworkCount, error: homeworkError } = await access.supabase
+    .from("homeworks")
+    .select("id", { count: "exact", head: true })
+    .eq("semester_id", sectionId);
+
+  if (homeworkError) {
+    if (
+      !String(homeworkError.message ?? "")
+        .toLowerCase()
+        .includes("does not exist")
+    ) {
+      return fail("تعذر التحقق من واجبات القسم قبل الحذف.");
+    }
+  } else if ((homeworkCount ?? 0) > 0) {
+    return fail("لا يمكن حذف قسم يحتوي واجبات. احذف الواجبات أولًا.");
+  }
+
   const { error } = await access.supabase
     .from("course_semesters")
     .delete()

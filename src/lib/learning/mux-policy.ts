@@ -49,16 +49,20 @@ export type MuxAssetVerdict =
   | { ok: false; reason: "passthrough" | "public_playback" | "errored" | "not_signed" };
 
 /**
- * يقبل أصل Mux فقط إذا أُنشئ لهذا الدرس وبسياسة signed.
+ * يقبل أصل Mux فقط إذا تطابق passthrough مع معرّف مكتبة الفيديو وبسياسة signed.
  * أي playback public يُرفض ولا يُحفظ.
+ * التوافق الخلفي: expectedPassthrough قد يكون lessonId للرفوعات القديمة.
  */
 export function reviewMuxAsset(input: {
-  lessonId: string;
+  /** @deprecated استخدم expectedPassthrough — يُقبل للتوافق مع الاختبارات القديمة */
+  lessonId?: string;
+  expectedPassthrough?: string;
   passthrough: string | null | undefined;
   status: string | null | undefined;
   playbackPolicies: string[];
 }): MuxAssetVerdict {
-  if ((input.passthrough ?? "") !== input.lessonId) {
+  const expected = input.expectedPassthrough ?? input.lessonId ?? "";
+  if (!expected || (input.passthrough ?? "") !== expected) {
     return { ok: false, reason: "passthrough" };
   }
   if (input.playbackPolicies.some((policy) => policy === "public")) {

@@ -98,17 +98,72 @@ export type CourseSemester = {
 
 export type LessonVideoSource = "mux" | "youtube";
 
+export type VideoAssetStatus = "uploading" | "processing" | "ready" | "failed";
+
+export type VideoAsset = {
+  id: string;
+  title: string;
+  mux_asset_id: string | null;
+  mux_upload_id: string | null;
+  mux_playback_id: string | null;
+  status: VideoAssetStatus;
+  duration_seconds: number | null;
+  thumbnail_url: string | null;
+  error_message: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type Lesson = {
   id: string;
   semester_id: string;
   title: string;
   description: string;
   video_asset_id: string | null;
+  /** مرجع مكتبة الفيديو — يُدار عبر service_role بعد الهجرة */
+  video_library_id: string | null;
   /** mux | youtube | null — يُدار عبر service_role بعد الهجرة */
   video_source: LessonVideoSource | null;
   youtube_video_id: string | null;
   duration_seconds: number | null;
   sort_order: number;
+  is_published: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CourseMaterial = {
+  id: string;
+  course_id: string;
+  semester_id: string;
+  title: string;
+  description: string;
+  storage_path: string;
+  file_size_bytes: number;
+  original_filename: string;
+  sort_order: number;
+  is_published: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type HomeworkFeedbackReleasePolicy =
+  | "on_finalize"
+  | "after_due"
+  | "never";
+
+export type Homework = {
+  id: string;
+  course_id: string;
+  semester_id: string;
+  title: string;
+  description: string;
+  max_attempts: number | null;
+  available_from: string | null;
+  due_at: string | null;
+  feedback_release_policy: HomeworkFeedbackReleasePolicy;
   is_published: boolean;
   created_at: string;
   updated_at: string;
@@ -277,6 +332,51 @@ export type Database = {
         Insert: Partial<Lesson> & { semester_id: string; title: string };
         Update: Partial<Lesson>;
       };
+      video_assets: {
+        Row: VideoAsset;
+        Insert: Partial<VideoAsset> & { title: string };
+        Update: Partial<VideoAsset>;
+      };
+      mux_webhook_events: {
+        Row: {
+          event_id: string;
+          event_type: string;
+          video_asset_id: string | null;
+          processed_at: string;
+          payload_digest: string | null;
+        };
+        Insert: {
+          event_id: string;
+          event_type: string;
+          video_asset_id?: string | null;
+          payload_digest?: string | null;
+        };
+        Update: Partial<{
+          event_type: string;
+          video_asset_id: string | null;
+          payload_digest: string | null;
+        }>;
+      };
+      course_materials: {
+        Row: CourseMaterial;
+        Insert: Partial<CourseMaterial> & {
+          course_id: string;
+          semester_id: string;
+          title: string;
+          storage_path: string;
+          file_size_bytes: number;
+        };
+        Update: Partial<CourseMaterial>;
+      };
+      homeworks: {
+        Row: Homework;
+        Insert: Partial<Homework> & {
+          course_id: string;
+          semester_id: string;
+          title: string;
+        };
+        Update: Partial<Homework>;
+      };
       products: {
         Row: Product;
         Insert: Partial<Product> & {
@@ -365,7 +465,7 @@ export type Database = {
     };
     Views: {
       lessons_catalog: {
-        Row: Omit<Lesson, "video_asset_id">;
+        Row: Omit<Lesson, "video_asset_id" | "video_library_id">;
       };
       exam_options_for_taking: {
         Row: Omit<ExamOption, "is_correct">;
@@ -444,6 +544,35 @@ export type Database = {
         Returns: unknown;
       };
       get_exam_grading_detail: {
+        Args: { p_attempt_id: string };
+        Returns: unknown;
+      };
+      start_homework_attempt: {
+        Args: { p_homework_id: string };
+        Returns: {
+          attempt_id: string;
+          attempt_number: number;
+          status: ExamAttemptStatus;
+        }[];
+      };
+      submit_homework_attempt: {
+        Args: { p_attempt_id: string; p_answers: unknown };
+        Returns: {
+          attempt_id: string;
+          score: number | null;
+          status: ExamAttemptStatus;
+          grading_status: ExamGradingStatus;
+        }[];
+      };
+      save_homework_essay_grades_draft: {
+        Args: { p_attempt_id: string; p_grades: unknown };
+        Returns: undefined;
+      };
+      finalize_homework_grading: {
+        Args: { p_attempt_id: string };
+        Returns: { attempt_id: string; score: number }[];
+      };
+      get_homework_attempt_review: {
         Args: { p_attempt_id: string };
         Returns: unknown;
       };

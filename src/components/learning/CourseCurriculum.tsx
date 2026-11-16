@@ -13,6 +13,43 @@ function ContentIcon({
 }) {
   const box = compact ? "h-7 w-7 rounded-md" : "h-8 w-8 rounded-lg";
   const className = compact ? "h-3.5 w-3.5" : "h-4 w-4";
+  if (kind === "homework") {
+    return (
+      <span
+        className={`inline-flex shrink-0 items-center justify-center bg-orange-400/15 text-orange-100 ${box}`}
+      >
+        <svg viewBox="0 0 24 24" className={className} fill="none" aria-hidden>
+          <path
+            d="M6 4h9l3 3v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z"
+            stroke="currentColor"
+            strokeWidth="1.8"
+          />
+          <path d="M9 11h6M9 14h6M9 17h4" stroke="currentColor" strokeWidth="1.8" />
+        </svg>
+      </span>
+    );
+  }
+  if (kind === "pdf") {
+    return (
+      <span
+        className={`inline-flex shrink-0 items-center justify-center bg-rose-400/15 text-rose-100 ${box}`}
+      >
+        <svg viewBox="0 0 24 24" className={className} fill="none" aria-hidden>
+          <path
+            d="M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z"
+            stroke="currentColor"
+            strokeWidth="1.8"
+          />
+          <path d="M14 3v5h5" stroke="currentColor" strokeWidth="1.8" />
+          <path
+            d="M9 13h6M9 16h6M9 19h3"
+            stroke="currentColor"
+            strokeWidth="1.8"
+          />
+        </svg>
+      </span>
+    );
+  }
   if (kind === "exam") {
     return (
       <span
@@ -99,6 +136,10 @@ function isInlineVideo(kind: CourseContentItem["kind"]) {
   );
 }
 
+function isInlineSelectable(kind: CourseContentItem["kind"]) {
+  return isInlineVideo(kind) || kind === "pdf";
+}
+
 function ContentRow({
   item,
   active,
@@ -112,10 +153,13 @@ function ContentRow({
   allowLockedSelection?: boolean;
   compact?: boolean;
 }) {
-  const canWatchInline =
+  const canOpenInline =
     Boolean(onSelect) &&
-    isInlineVideo(item.kind) &&
+    isInlineSelectable(item.kind) &&
     (!item.locked || allowLockedSelection);
+
+  const actionLabel =
+    item.kind === "pdf" ? "فتح" : isInlineVideo(item.kind) ? "مشاهدة" : null;
 
   const body = (
     <div
@@ -144,13 +188,13 @@ function ContentRow({
           {item.unpublished ? " · غير منشور" : ""}
         </p>
       </div>
-      {canWatchInline ? (
+      {canOpenInline && actionLabel ? (
         <span
           className={`shrink-0 rounded-md bg-primary/25 font-medium text-light-purple ${
             compact ? "px-1.5 py-0.5 text-[10px]" : "px-2 py-1 text-[11px]"
           }`}
         >
-          مشاهدة
+          {actionLabel}
         </span>
       ) : (
         <span
@@ -162,13 +206,17 @@ function ContentRow({
               : "bg-emerald-400/10 text-emerald-100"
           }`}
         >
-          {item.locked ? item.lockedLabel ?? "مقفل" : item.kind === "exam" ? "فتح" : "متاح"}
+          {item.locked
+            ? item.lockedLabel ?? "مقفل"
+            : item.kind === "exam" || item.kind === "homework"
+              ? "فتح"
+              : "متاح"}
         </span>
       )}
     </div>
   );
 
-  if (canWatchInline && onSelect) {
+  if (canOpenInline && onSelect) {
     return (
       <button
         type="button"

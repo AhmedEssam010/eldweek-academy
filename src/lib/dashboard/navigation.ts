@@ -31,14 +31,29 @@ export const adminNavItems: DashboardNavItem[] = [
     description: "الكورسات والأقسام والنشر",
   },
   {
+    href: "/admin/video-library",
+    label: "مكتبة الفيديو",
+    description: "فيديوهات Mux القابلة لإعادة الاستخدام",
+  },
+  {
     href: "/admin/exams",
     label: "الامتحانات",
     description: "امتحانات كل كورس",
   },
   {
+    href: "/admin/homework",
+    label: "الواجبات",
+    description: "واجبات كل كورس",
+  },
+  {
     href: "/admin/grading",
     label: "تصحيح الامتحانات",
     description: "تصحيح المقالات واعتماد النتائج",
+  },
+  {
+    href: "/admin/homework-grading",
+    label: "تصحيح الواجبات",
+    description: "تصحيح مقالات الواجبات واعتمادها",
   },
 ];
 
@@ -74,6 +89,6 @@ export const studentNavItems: DashboardNavItem[] = [
   {
     href: "/student/results",
     label: "نتائجي",
-    description: "محاولات الامتحانات",
+    description: "نتائج الامتحانات والواجبات",
   },
 ];

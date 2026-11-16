@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { SetupRequiredPanel } from "@/components/dashboard/SetupRequiredPanel";
+import { CourseMaterialManager } from "@/components/learning/CourseMaterialManager";
 import { LessonList } from "@/components/learning/LessonList";
 import { MutationForm } from "@/components/dashboard/MutationForm";
 import { requireTeacher } from "@/lib/auth/guards";
@@ -105,6 +106,13 @@ export default async function TeacherSemesterDetailPage({ params }: PageProps) {
               )
             : undefined
         }
+      />
+
+      <CourseMaterialManager
+        courseId={id}
+        semesterId={semesterId}
+        materials={detail.data.materials ?? []}
+        canEdit={canEdit}
       />
     </div>
   );

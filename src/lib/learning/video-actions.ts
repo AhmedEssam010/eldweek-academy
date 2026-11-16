@@ -8,23 +8,28 @@ import {
   createDirectUpload,
   getMuxReadiness,
   syncDirectUpload,
+  syncLegacyLessonUpload,
 } from "@/lib/learning/mux";
 import { describeMuxUploadFailure } from "@/lib/learning/mux-policy";
 import { createClient } from "@/lib/supabase/server";
+import {
+  insertVideoAssetDraft,
+  linkLessonToVideoAsset,
+} from "@/lib/learning/video-library";
 
 const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MUX_ID = /^[A-Za-z0-9]{8,80}$/;
 
 export type UploadActionResult =
-  | { ok: true; uploadId: string; uploadUrl: string }
+  | { ok: true; uploadId: string; uploadUrl: string; videoLibraryId: string }
   | { ok: false; message: string };
 
 export type SyncActionResult =
   | { ok: true; state: "waiting" | "processing" | "ready" | "error"; message: string }
   | { ok: false; message: string };
 
-async function requireLessonEditor(input: {
+export async function requireLessonEditor(input: {
   courseId: string;
   semesterId: string;
   lessonId: string;
@@ -69,14 +74,14 @@ async function requireLessonEditor(input: {
   if (lessonError || !lesson || semester?.course_id !== input.courseId) {
     return { ok: false as const, message: "الدرس لا ينتمي لهذا الترم والكورس." };
   }
-  return { ok: true as const };
+  return { ok: true as const, userId: profile.userId, role: profile.role };
 }
 
 function readMuxUploadFailure(error: unknown) {
   const record = error && typeof error === "object" ? (error as Record<string, unknown>) : {};
   const status = typeof record.status === "number" ? record.status : null;
-  const headers = record.headers as { get?: (name: string) => string | null } | undefined;
-  const requestId = headers?.get?.("x-request-id") ?? headers?.get?.("x-mux-request-id") ?? null;
+  const headersObj = record.headers as { get?: (name: string) => string | null } | undefined;
+  const requestId = headersObj?.get?.("x-request-id") ?? headersObj?.get?.("x-mux-request-id") ?? null;
   const body = record.error as { error?: { type?: unknown }; type?: unknown } | undefined;
   const nestedType = body?.error?.type ?? body?.type;
   const type = typeof nestedType === "string" ? nestedType : null;
@@ -89,12 +94,14 @@ function revalidateLesson(courseId: string, semesterId: string, lessonId: string
   revalidatePath(`/teacher/courses/${courseId}/lessons/${lessonId}`);
   revalidatePath(`/admin/courses/${courseId}/semesters/${semesterId}`);
   revalidatePath(`/teacher/courses/${courseId}/semesters/${semesterId}`);
+  revalidatePath("/admin/video-library");
 }
 
 export async function createLessonVideoUpload(input: {
   courseId: string;
   semesterId: string;
   lessonId: string;
+  title?: string;
 }): Promise<UploadActionResult> {
   const access = await requireLessonEditor(input);
   if (!access.ok) return access;
@@ -103,12 +110,33 @@ export async function createLessonVideoUpload(input: {
   }
   const origin = (await headers()).get("origin")?.trim() ?? "";
   if (!/^https?:\/\/[^\s]+$/.test(origin)) {
-    return { ok: false, message: "تعذر تحديد عنوان الموقع اللازم لرفع الملف." };
+    return { ok: false, message: "تعذر تحديد عنوان الموقع اللازم لرفع الملف (Origin)." };
   }
+
+  const draft = await insertVideoAssetDraft({
+    title: input.title?.trim() || "فيديو درس",
+    createdBy: access.userId,
+  });
+  if (!draft) {
+    return {
+      ok: false,
+      message:
+        "تعذر إنشاء سجل في مكتبة الفيديو. تأكد من تطبيق هجرة video_assets بموافقة المالك.",
+    };
+  }
+
   try {
-    const upload = await createDirectUpload({ lessonId: input.lessonId, origin });
-    if (!upload) return { ok: false, message: "تعذر إنشاء رابط الرفع الآمن." };
-    return { ok: true, uploadId: upload.uploadId, uploadUrl: upload.uploadUrl };
+    const upload = await createDirectUpload({
+      videoLibraryId: draft.id,
+      origin,
+    });
+    if (!upload) return { ok: false, message: "تعذر إنشاء رابط الرفع الآمن من Mux." };
+    return {
+      ok: true,
+      uploadId: upload.uploadId,
+      uploadUrl: upload.uploadUrl,
+      videoLibraryId: draft.id,
+    };
   } catch (error) {
     const failure = readMuxUploadFailure(error);
     console.error("[mux-direct-upload]", {
@@ -125,6 +153,7 @@ export async function syncLessonVideoUpload(input: {
   semesterId: string;
   lessonId: string;
   uploadId: string;
+  videoLibraryId?: string;
 }): Promise<SyncActionResult> {
   const access = await requireLessonEditor(input);
   if (!access.ok) return access;
@@ -132,11 +161,19 @@ export async function syncLessonVideoUpload(input: {
     return { ok: false, message: "معرّف الرفع غير صالح." };
   }
   try {
-    const result = await syncDirectUpload({
-      lessonId: input.lessonId,
-      semesterId: input.semesterId,
-      uploadId: input.uploadId,
-    });
+    const result =
+      input.videoLibraryId && UUID.test(input.videoLibraryId)
+        ? await syncDirectUpload({
+            videoLibraryId: input.videoLibraryId,
+            uploadId: input.uploadId,
+            lessonId: input.lessonId,
+            semesterId: input.semesterId,
+          })
+        : await syncLegacyLessonUpload({
+            lessonId: input.lessonId,
+            semesterId: input.semesterId,
+            uploadId: input.uploadId,
+          });
     if (result.state === "ready" || result.state === "processing") {
       revalidateLesson(input.courseId, input.semesterId, input.lessonId);
     }
@@ -144,4 +181,25 @@ export async function syncLessonVideoUpload(input: {
   } catch {
     return { ok: false, message: "تعذر التحقق من حالة الفيديو." };
   }
+}
+
+export async function linkLessonLibraryVideoAction(input: {
+  courseId: string;
+  semesterId: string;
+  lessonId: string;
+  videoLibraryId: string;
+}): Promise<{ ok: true; message: string } | { ok: false; message: string }> {
+  const access = await requireLessonEditor(input);
+  if (!access.ok) return access;
+  if (!UUID.test(input.videoLibraryId)) {
+    return { ok: false, message: "معرّف فيديو المكتبة غير صالح." };
+  }
+  const linked = await linkLessonToVideoAsset({
+    lessonId: input.lessonId,
+    semesterId: input.semesterId,
+    videoLibraryId: input.videoLibraryId,
+  });
+  if (!linked.ok) return linked;
+  revalidateLesson(input.courseId, input.semesterId, input.lessonId);
+  return { ok: true, message: "تم ربط فيديو المكتبة بالدرس دون رفع جديد." };
 }

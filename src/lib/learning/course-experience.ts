@@ -3,6 +3,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthReadiness } from "@/lib/auth/readiness";
 import { SITE_NAME } from "@/lib/data/navigation";
+import { formatFileSizeBytes } from "@/lib/learning/course-materials";
 import { getSemesterDetail, listCourseSemesters } from "@/lib/learning/data";
 import type {
   CourseContentItem,
@@ -47,6 +48,10 @@ function contentKindMeta(kind: CourseContentItem["kind"]): {
       return { kind, kindLabel: "واجب" };
     case "exam":
       return { kind, kindLabel: "امتحان" };
+    case "pdf":
+      return { kind, kindLabel: "ملف PDF" };
+    case "homework":
+      return { kind, kindLabel: "واجب" };
     default:
       return { kind: "lesson", kindLabel: "درس" };
   }
@@ -201,8 +206,90 @@ async function buildSections(input: {
       };
     });
 
-    // ترتيب الدروس كما ضبطه المالك، ثم الامتحانات المنشورة/المعروضة للقسم
-    const orderedItems = [...lessons, ...examItems];
+    const pdfItems: CourseContentItem[] = (detail.data.materials ?? [])
+      .filter((material) =>
+        input.includeUnpublished ? true : material.isPublished,
+      )
+      .map((material) => {
+        const unpublished = !material.isPublished;
+        const locked =
+          input.mode === "admin_preview" || input.mode === "public_preview"
+            ? true
+            : !input.hasAccess || unpublished;
+        const meta = contentKindMeta("pdf");
+        return {
+          id: material.id,
+          kind: meta.kind,
+          kindLabel: meta.kindLabel,
+          title: material.title,
+          durationLabel: formatFileSizeBytes(material.fileSizeBytes),
+          locked,
+          lockedLabel:
+            input.mode === "admin_preview"
+              ? "معاينة فقط — الملف للطالب المشترك"
+              : input.mode === "public_preview" || !input.hasAccess
+                ? "مقفل — يلزم اشتراك نشط"
+                : unpublished
+                  ? "غير منشور"
+                  : undefined,
+          unpublished,
+          href: null,
+        };
+      });
+
+    const homeworkQuery = access
+      .from("homeworks")
+      .select("id, title, due_at, is_published")
+      .eq("semester_id", semester.id);
+    const { data: homeworkRows, error: homeworkError } =
+      input.includeUnpublished
+        ? await homeworkQuery
+        : await homeworkQuery.eq("is_published", true);
+
+    const homeworkItems: CourseContentItem[] = (
+      homeworkError ? [] : homeworkRows ?? []
+    ).map(
+      (homework) => {
+        const unpublished = !homework.is_published;
+        const locked =
+          input.mode === "admin_preview" || input.mode === "public_preview"
+            ? true
+            : !input.hasAccess || unpublished;
+        const meta = contentKindMeta("homework");
+        const dueLabel = homework.due_at
+          ? `تسليم ${new Date(homework.due_at).toLocaleDateString("ar-EG")}`
+          : null;
+        return {
+          id: homework.id,
+          kind: meta.kind,
+          kindLabel: meta.kindLabel,
+          title: homework.title,
+          durationLabel: dueLabel,
+          locked,
+          lockedLabel:
+            input.mode === "admin_preview"
+              ? "معاينة فقط — الواجب للطالب المشترك"
+              : input.mode === "public_preview" || !input.hasAccess
+                ? "مقفل — يلزم اشتراك نشط"
+                : unpublished
+                  ? "غير منشور"
+                  : undefined,
+          unpublished,
+          href:
+            input.mode === "student" && !locked
+              ? `/student/homework/${homework.id}`
+              : null,
+        };
+      },
+    );
+
+    // دروس، PDF، واجبات، ثم الامتحانات
+    const orderedItems = [
+      ...lessons,
+      ...pdfItems,
+      ...homeworkItems,
+      ...examItems,
+    ];
 
     if (
       orderedItems.length === 0 &&

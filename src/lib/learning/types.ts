@@ -44,6 +44,18 @@ export type LessonListItem = {
   lockedLabel?: string;
 };
 
+export type CourseMaterialListItem = {
+  id: string;
+  courseId: string;
+  semesterId: string;
+  title: string;
+  description: string;
+  fileSizeBytes: number;
+  originalFilename: string;
+  sortOrder: number;
+  isPublished: boolean;
+};
+
 export type LessonDetailSafe = {
   id: string;
   semesterId: string;
@@ -301,12 +313,85 @@ export type StudentCourseDetail = {
   >;
 };
 
+export type HomeworkFeedbackPolicy = "on_finalize" | "after_due" | "never";
+
+export type HomeworkListItem = {
+  id: string;
+  courseId: string;
+  semesterId: string;
+  title: string;
+  description: string;
+  maxAttempts: number | null;
+  availableFrom: string | null;
+  dueAt: string | null;
+  feedbackReleasePolicy: HomeworkFeedbackPolicy;
+  isPublished: boolean;
+  questionsCount: number;
+  totalPoints: number;
+};
+
+export type HomeworkEditorView = HomeworkListItem & {
+  courseTitle: string;
+  semesterTitle: string;
+  questions: ExamQuestionEditorView[];
+};
+
+export type HomeworkTakingView = {
+  id: string;
+  title: string;
+  description: string;
+  maxAttempts: number | null;
+  dueAt: string | null;
+  availableFrom: string | null;
+  questions: ExamTakingQuestion[];
+  attemptId: string | null;
+  attemptNumber: number | null;
+  attemptStatus: "in_progress" | "submitted" | "expired" | "abandoned" | null;
+  gradingStatus: ExamGradingStatusView | null;
+  score: number | null;
+  remainingAttempts: number | null;
+  usedAttempts: number;
+};
+
+export type HomeworkAttemptSummary = {
+  id: string;
+  homeworkId: string;
+  homeworkTitle: string;
+  attemptNumber: number;
+  status: string;
+  gradingStatus: ExamGradingStatusView;
+  score: number | null;
+  objectiveEarned: number | null;
+  essayEarned: number | null;
+  totalPoints: number | null;
+  submittedAt: string | null;
+  resultsReleased: boolean;
+};
+
+export type HomeworkGradingQueueItem = {
+  attemptId: string;
+  homeworkId: string;
+  homeworkTitle: string;
+  courseId: string;
+  courseTitle: string;
+  semesterTitle: string;
+  studentId: string;
+  studentName: string;
+  attemptNumber: number;
+  submittedAt: string | null;
+  gradingStatus: ExamGradingStatusView;
+  objectiveEarned: number | null;
+  totalPoints: number | null;
+};
+
 export type CourseContentKind =
   | "explanation_video"
   | "solution_video"
   | "assignment"
   | "lesson"
-  | "exam";
+  | "exam"
+  | "pdf"
+  | "homework";
 
 export type CourseContentItem = {
   id: string;

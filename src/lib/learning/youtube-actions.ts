@@ -158,13 +158,15 @@ export async function clearLessonYoutubeAction(input: {
 
   const { data: row } = await service
     .from("lessons")
-    .select("video_asset_id")
+    .select("video_asset_id, video_library_id")
     .eq("id", input.lessonId)
     .maybeSingle();
 
   const hasMux =
-    typeof row?.video_asset_id === "string" &&
-    row.video_asset_id.trim().length > 0;
+    (typeof row?.video_library_id === "string" &&
+      row.video_library_id.trim().length > 0) ||
+    (typeof row?.video_asset_id === "string" &&
+      row.video_asset_id.trim().length > 0);
 
   const { error } = await service
     .from("lessons")
@@ -204,7 +206,7 @@ export async function getStaffLessonYoutubeSetup(lessonId: string): Promise<{
 
   const { data, error } = await service
     .from("lessons")
-    .select("video_asset_id, video_source, youtube_video_id")
+    .select("video_asset_id, video_library_id, video_source, youtube_video_id")
     .eq("id", lessonId)
     .maybeSingle();
 
@@ -225,8 +227,10 @@ export async function getStaffLessonYoutubeSetup(lessonId: string): Promise<{
   }
 
   const hasMux =
-    typeof data.video_asset_id === "string" &&
-    data.video_asset_id.trim().length > 0;
+    (typeof data.video_library_id === "string" &&
+      data.video_library_id.trim().length > 0) ||
+    (typeof data.video_asset_id === "string" &&
+      data.video_asset_id.trim().length > 0);
   const youtubeOk = isValidYoutubeVideoId(data.youtube_video_id);
 
   if (data.video_source === "youtube" && youtubeOk) {

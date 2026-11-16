@@ -53,6 +53,7 @@ export default async function AdminLessonEditorPage({ params }: PageProps) {
         courseId={lesson.data.courseId}
         semesterId={lesson.data.semesterId}
         lessonId={lesson.data.id}
+        lessonTitle={lesson.data.title}
         canEdit
       />
     </div>

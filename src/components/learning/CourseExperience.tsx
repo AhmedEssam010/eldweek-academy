@@ -6,6 +6,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { CourseCurriculum } from "@/components/learning/CourseCurriculum";
 import { CourseThumbnail } from "@/components/learning/CourseThumbnail";
 import { InlineCoursePlayer } from "@/components/learning/InlineCoursePlayer";
+import { InlinePdfViewer } from "@/components/learning/InlinePdfViewer";
 import { PurchaseForm } from "@/components/learning/PurchaseForm";
 import { academicSemesterLabel } from "@/lib/learning/course-structure";
 import { loadCourseLessonPlaybackAction } from "@/lib/learning/inline-playback-actions";
@@ -48,6 +49,14 @@ function isVideoItem(item: CourseContentItem) {
   );
 }
 
+function isPdfItem(item: CourseContentItem) {
+  return item.kind === "pdf";
+}
+
+function isInlineItem(item: CourseContentItem) {
+  return isVideoItem(item) || isPdfItem(item);
+}
+
 function formatPrice(priceEgp: string | null | undefined) {
   if (priceEgp == null || priceEgp === "") return null;
   const n = Number(priceEgp);
@@ -70,8 +79,19 @@ export function CourseExperience({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const selectedLessonId = searchParams.get("lesson");
+  const selectedMaterialId = searchParams.get("material");
   const wantsSubscribe = searchParams.get("subscribe") === "1";
-  const watching = Boolean(selectedLessonId);
+  const watching = Boolean(selectedLessonId || selectedMaterialId);
+
+  const selectedPdfItem = useMemo(() => {
+    if (!selectedMaterialId) return null;
+    return (
+      course.sections
+        .flatMap((section) => section.items)
+        .find((item) => item.kind === "pdf" && item.id === selectedMaterialId) ??
+      null
+    );
+  }, [course.sections, selectedMaterialId]);
 
   const [loaded, setLoaded] = useState<LoadedPlayback | null>(null);
   const [pending, startTransition] = useTransition();
@@ -175,24 +195,35 @@ export function CourseExperience({
     isPreview,
   ]);
 
-  function selectLesson(item: CourseContentItem) {
-    if (!isVideoItem(item)) return;
+  function selectContentItem(item: CourseContentItem) {
+    if (!isInlineItem(item)) return;
     if (item.locked && !isAdminPreview) return;
-    if (item.id !== selectedLessonId) {
-      setLoaded(null);
-    }
+
     const params = new URLSearchParams(searchParams.toString());
-    params.set("lesson", item.id);
+    if (isVideoItem(item)) {
+      if (item.id !== selectedLessonId) {
+        setLoaded(null);
+      }
+      params.delete("material");
+      params.set("lesson", item.id);
+    } else {
+      setLoaded(null);
+      params.delete("lesson");
+      params.set("material", item.id);
+    }
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   }
 
-  function clearLessonSelection() {
+  function clearInlineSelection() {
     const params = new URLSearchParams(searchParams.toString());
     params.delete("lesson");
+    params.delete("material");
     const query = params.toString();
     router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
     setLoaded(null);
   }
+
+  const activeItemId = selectedMaterialId ?? selectedLessonId;
 
   const matchedLoad =
     loaded && selectedLessonId && loaded.lessonId === selectedLessonId
@@ -369,14 +400,31 @@ export function CourseExperience({
           }`}
         >
           {watching ? (
-            <InlineCoursePlayer
-              selectedLessonId={selectedLessonId}
-              loading={playerLoading}
-              lesson={playerLesson}
-              playback={playerPlayback}
-              errorMessage={playerError}
-              previewMode={isPreview}
-            />
+            selectedMaterialId ? (
+              <InlinePdfViewer
+                materialId={selectedMaterialId}
+                title={selectedPdfItem?.title}
+                previewMode={isPreview}
+                lockedMessage={
+                  isPreview
+                    ? null
+                    : !course.hasAccess
+                      ? "يلزم اشتراك نشط لفتح ملفات PDF المحمية."
+                      : selectedPdfItem?.locked
+                        ? selectedPdfItem.lockedLabel ?? "هذا الملف مقفل."
+                        : null
+                }
+              />
+            ) : (
+              <InlineCoursePlayer
+                selectedLessonId={selectedLessonId}
+                loading={playerLoading}
+                lesson={playerLesson}
+                playback={playerPlayback}
+                errorMessage={playerError}
+                previewMode={isPreview}
+              />
+            )
           ) : (
             <div className="space-y-3">
               <div>
@@ -385,14 +433,14 @@ export function CourseExperience({
                 </h2>
                 <p className="mt-1 text-xs text-white/50">
                   {course.hasAccess
-                    ? "اضغط «مشاهدة» لفتح الفيديو في هذه اللوحة دون مغادرة الصفحة."
+                    ? "افتح فيديو أو ملف PDF هنا دون مغادرة الصفحة."
                     : "تصفح الأقسام المنشورة. المحتوى المدفوع يظهر مقفلًا حتى الاشتراك."}
                 </p>
               </div>
               <CourseCurriculum
                 sections={course.sections}
-                activeItemId={selectedLessonId}
-                onSelectItem={selectLesson}
+                activeItemId={activeItemId}
+                onSelectItem={selectContentItem}
                 allowLockedSelection={isAdminPreview}
                 variant="main"
               />
@@ -410,7 +458,7 @@ export function CourseExperience({
             <>
               <button
                 type="button"
-                onClick={clearLessonSelection}
+                onClick={clearInlineSelection}
                 className="inline-flex w-full items-center justify-center rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-medium text-white transition hover:border-primary/40 hover:bg-primary/10"
               >
                 العودة إلى محتويات الكورس
@@ -419,13 +467,13 @@ export function CourseExperience({
               <div>
                 <h2 className="text-sm font-semibold text-white">منهج الكورس</h2>
                 <p className="mt-1 text-xs text-white/50">
-                  بدّل بين الدروس من هنا دون إعادة تحميل الصفحة.
+                  بدّل بين الفيديو وملفات PDF من هنا دون إعادة تحميل الصفحة.
                 </p>
                 <div className="mt-3">
                   <CourseCurriculum
                     sections={course.sections}
-                    activeItemId={selectedLessonId}
-                    onSelectItem={selectLesson}
+                    activeItemId={activeItemId}
+                    onSelectItem={selectContentItem}
                     allowLockedSelection={isAdminPreview}
                     variant="sidebar"
                   />

@@ -6,7 +6,7 @@ import type { StaffCourseAccess } from "@/lib/learning/types";
 type CourseContentLayoutProps = {
   access: StaffCourseAccess;
   basePath: string;
-  active: "overview" | "semesters" | "exams" | "progress";
+  active: "overview" | "semesters" | "exams" | "homework" | "progress";
   children: React.ReactNode;
   description?: string;
 };
@@ -29,6 +29,12 @@ export function CourseContentLayout({
       key: "exams" as const,
       href: `${basePath}/exams`,
       label: "الامتحانات",
+      requires: access.canManageExams || access.isAdmin,
+    },
+    {
+      key: "homework" as const,
+      href: `${basePath}/homework`,
+      label: "الواجبات",
       requires: access.canManageExams || access.isAdmin,
     },
     {

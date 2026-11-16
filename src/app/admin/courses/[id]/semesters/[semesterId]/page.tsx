@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { SetupRequiredPanel } from "@/components/dashboard/SetupRequiredPanel";
+import { CourseMaterialManager } from "@/components/learning/CourseMaterialManager";
 import { LessonList } from "@/components/learning/LessonList";
 import { MutationForm } from "@/components/dashboard/MutationForm";
 import { requireAdmin } from "@/lib/auth/guards";
@@ -123,6 +124,13 @@ export default async function AdminSemesterDetailPage({ params }: PageProps) {
           )}
         />
       </section>
+
+      <CourseMaterialManager
+        courseId={id}
+        semesterId={semesterId}
+        materials={detail.data.materials ?? []}
+        canEdit
+      />
 
       <p className="text-sm text-white/55">
         امتحانات الكورس:{" "}

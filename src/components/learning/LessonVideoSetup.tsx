@@ -14,11 +14,13 @@ export async function LessonVideoSetup({
   courseId,
   semesterId,
   lessonId,
+  lessonTitle,
   canEdit,
 }: {
   courseId: string;
   semesterId: string;
   lessonId: string;
+  lessonTitle?: string;
   canEdit: boolean;
 }) {
   const [setup, youtubeSetup] = await Promise.all([
@@ -46,6 +48,7 @@ export async function LessonVideoSetup({
       courseId={courseId}
       semesterId={semesterId}
       lessonId={lessonId}
+      lessonTitle={lessonTitle}
       canEdit={canEdit}
       muxReady={muxReady}
       initialSource={youtubeSetup.source}
