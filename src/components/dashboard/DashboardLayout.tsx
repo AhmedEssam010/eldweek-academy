@@ -23,7 +23,7 @@ export function DashboardLayout({
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
-    <div className="flex min-h-full bg-[radial-gradient(circle_at_top,_rgba(124,58,237,0.12),_transparent_40%),#0B0913]">
+    <div className="flex min-h-full w-full min-w-0 max-w-full bg-[radial-gradient(circle_at_top,_rgba(124,58,237,0.12),_transparent_40%),#0B0913]">
       <DashboardSidebar
         items={navItems}
         roleLabel={roleLabel}
@@ -31,13 +31,15 @@ export function DashboardLayout({
         onClose={() => setSidebarOpen(false)}
       />
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-w-0 max-w-full flex-1 flex-col">
         <DashboardTopbar
           title={title}
           fullName={fullName}
           onMenuOpen={() => setSidebarOpen(true)}
         />
-        <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">{children}</main>
+        <main className="min-w-0 max-w-full flex-1 px-4 py-6 sm:px-6 lg:px-8">
+          <div className="mx-auto w-full min-w-0 max-w-full">{children}</div>
+        </main>
       </div>
     </div>
   );

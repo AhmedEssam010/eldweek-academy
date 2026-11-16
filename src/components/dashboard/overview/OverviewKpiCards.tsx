@@ -27,18 +27,18 @@ const scopeLabels: Record<OverviewKpi["scope"], string> = {
 
 export function OverviewKpiCards({ kpis }: { kpis: OverviewKpi[] }) {
   return (
-    <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+    <section className="grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-3">
       {kpis.map((kpi) => {
         const body = (
-          <article className="group relative h-full overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-[#1b132d] via-surface to-[#120c1f] p-5 transition hover:border-primary/45">
+          <article className="group relative h-full min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-[#1b132d] via-surface to-[#120c1f] p-4 transition hover:border-primary/45 sm:p-5">
             <div
               className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-l from-transparent via-primary/50 to-transparent"
               aria-hidden
             />
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-sm text-white/65">{kpi.label}</p>
-                <p className="mt-3 text-2xl font-bold tracking-tight text-white sm:text-3xl">
+            <div className="flex min-w-0 items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="break-words text-sm text-white/65">{kpi.label}</p>
+                <p className="mt-3 break-words text-2xl font-bold tracking-tight text-white sm:text-3xl">
                   {kpi.display}
                 </p>
               </div>

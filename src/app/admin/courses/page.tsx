@@ -54,7 +54,7 @@ export default async function AdminCoursesPage({
   });
 
   return (
-    <div className="space-y-6">
+    <div className="w-full min-w-0 max-w-full space-y-6">
       <PageHeader
         title="الكورسات"
         description="كل صف هنا كورس مشتَرى داخل ترم دراسي. الأقسام داخل الكورس تنظيمية وليست منتجات."

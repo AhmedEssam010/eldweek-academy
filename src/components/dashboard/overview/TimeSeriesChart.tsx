@@ -53,9 +53,11 @@ export function TimeSeriesChart({
   const active = hover !== null ? coords[hover] : null;
 
   return (
-    <section className="rounded-2xl border border-white/10 bg-surface p-5">
-      <div className="flex flex-wrap items-end justify-between gap-2">
-        <h3 className="text-base font-semibold text-white">{title}</h3>
+    <section className="min-w-0 rounded-2xl border border-white/10 bg-surface p-4 sm:p-5">
+      <div className="flex min-w-0 flex-wrap items-end justify-between gap-2">
+        <h3 className="min-w-0 break-words text-base font-semibold text-white">
+          {title}
+        </h3>
         {active ? (
           <p className="text-sm text-light-purple">
             {active.label}:{" "}
@@ -71,10 +73,10 @@ export function TimeSeriesChart({
           {emptyLabel}
         </div>
       ) : (
-        <div className="mt-4 overflow-x-auto">
+        <div className="mt-4 w-full min-w-0 max-w-full overflow-x-auto">
           <svg
             viewBox={`0 0 ${width} ${height}`}
-            className="h-56 w-full min-w-[28rem]"
+            className="h-48 w-full min-w-0 sm:h-56"
             role="img"
             aria-label={title}
           >

@@ -8,9 +8,9 @@ import type { RecentPaymentRow } from "@/lib/dashboard/analytics-types";
 
 export function RecentPaymentsPanel({ rows }: { rows: RecentPaymentRow[] }) {
   return (
-    <section className="rounded-2xl border border-white/10 bg-surface p-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h3 className="text-base font-semibold text-white">
+    <section className="min-w-0 rounded-2xl border border-white/10 bg-surface p-4 sm:p-5">
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+        <h3 className="min-w-0 break-words text-base font-semibold text-white">
           أحدث طلبات الاشتراك
         </h3>
         <Link
@@ -26,8 +26,8 @@ export function RecentPaymentsPanel({ rows }: { rows: RecentPaymentRow[] }) {
           لا توجد طلبات اشتراك بعد
         </div>
       ) : (
-        <div className="mt-4 overflow-x-auto">
-          <table className="min-w-full text-sm">
+        <div className="mt-4 w-full min-w-0 max-w-full overflow-x-auto">
+          <table className="w-full min-w-[36rem] text-sm">
             <thead>
               <tr className="border-b border-white/10 text-right text-white/45">
                 <th className="px-3 py-2 font-medium">الطالب</th>

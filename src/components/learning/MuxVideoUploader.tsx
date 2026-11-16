@@ -153,7 +153,7 @@ export function MuxVideoUploader({
   const busy = phase === "preparing" || phase === "uploading" || phase === "processing";
 
   return (
-    <form onSubmit={onSubmit} className="space-y-3">
+    <form onSubmit={onSubmit} className="w-full min-w-0 max-w-full space-y-3">
       {requireTitle || titlePlaceholder ? (
         <label className="block text-xs text-white/55">
           عنوان الفيديو

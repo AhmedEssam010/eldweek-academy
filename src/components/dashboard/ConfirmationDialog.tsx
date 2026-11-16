@@ -62,11 +62,13 @@ export function ConfirmationDialog({
           aria-modal="true"
           aria-labelledby="confirm-title"
         >
-          <div className="w-full max-w-md rounded-2xl border border-white/10 bg-surface p-5 shadow-xl">
-            <h3 id="confirm-title" className="text-lg font-semibold text-white">
+          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-white/10 bg-surface p-5 shadow-xl">
+            <h3 id="confirm-title" className="break-words text-lg font-semibold text-white">
               {title}
             </h3>
-            <p className="mt-2 text-sm leading-7 text-white/70">{description}</p>
+            <p className="mt-2 break-words text-sm leading-7 text-white/70">
+              {description}
+            </p>
             {message ? (
               <p
                 className={`mt-3 rounded-xl border px-3 py-2 text-xs ${
@@ -78,7 +80,7 @@ export function ConfirmationDialog({
                 {message}
               </p>
             ) : null}
-            <div className="mt-5 flex justify-end gap-2">
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
               <button
                 type="button"
                 className="rounded-xl border border-white/15 px-4 py-2 text-sm text-white/80"

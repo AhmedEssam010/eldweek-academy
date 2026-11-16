@@ -25,7 +25,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       dir="rtl"
       className={`${cairo.variable} h-full antialiased`}
     >
-      <body className="min-h-full bg-background font-sans text-foreground">
+      <body className="min-h-full min-w-0 max-w-full bg-background font-sans text-foreground">
         {children}
       </body>
     </html>

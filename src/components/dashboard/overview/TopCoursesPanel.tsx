@@ -10,9 +10,9 @@ export function TopCoursesPanel({ rows, rangeLabel }: TopCoursesPanelProps) {
   const maxRevenue = Math.max(...rows.map((r) => r.revenueEgp), 0);
 
   return (
-    <section className="rounded-2xl border border-white/10 bg-surface p-5">
-      <div className="flex flex-wrap items-end justify-between gap-2">
-        <h3 className="text-base font-semibold text-white">
+    <section className="min-w-0 rounded-2xl border border-white/10 bg-surface p-4 sm:p-5">
+      <div className="flex min-w-0 flex-wrap items-end justify-between gap-2">
+        <h3 className="min-w-0 break-words text-base font-semibold text-white">
           الكورسات الأعلى مبيعًا
         </h3>
         <p className="text-xs text-white/45">{rangeLabel} · إيراد معتمد</p>
@@ -29,8 +29,8 @@ export function TopCoursesPanel({ rows, rangeLabel }: TopCoursesPanelProps) {
               maxRevenue > 0 ? Math.max((row.revenueEgp / maxRevenue) * 100, 6) : 0;
             return (
               <li key={row.courseId}>
-                <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-sm font-medium text-white">
+                <div className="mb-1.5 flex min-w-0 flex-wrap items-center justify-between gap-2">
+                  <p className="min-w-0 break-words text-sm font-medium text-white">
                     <span className="ml-2 text-white/40">
                       {String(index + 1).padStart(2, "0")}
                     </span>

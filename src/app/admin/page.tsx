@@ -26,7 +26,7 @@ export default async function AdminHomePage({ searchParams }: PageProps) {
   const dashboard = result.data;
 
   return (
-    <div className="space-y-6">
+    <div className="w-full min-w-0 max-w-full space-y-6">
       <PageHeader
         title="نظرة عامة"
         description="تابع أداء منصتك وإيراداتك ونشاط الطلاب من مكان واحد"
@@ -52,8 +52,8 @@ export default async function AdminHomePage({ searchParams }: PageProps) {
 
       <OverviewKpiCards kpis={dashboard.kpis} />
 
-      <section className="grid gap-4 xl:grid-cols-5">
-        <div className="xl:col-span-3">
+      <section className="grid min-w-0 gap-4 xl:grid-cols-5">
+        <div className="min-w-0 xl:col-span-3">
           <TimeSeriesChart
             title="الإيرادات عبر الوقت"
             points={dashboard.revenueSeries}
@@ -61,7 +61,7 @@ export default async function AdminHomePage({ searchParams }: PageProps) {
             emptyLabel="لا إيرادات معتمدة في هذه الفترة · 0 ج.م"
           />
         </div>
-        <div className="xl:col-span-2">
+        <div className="min-w-0 xl:col-span-2">
           <PaymentStatusDonut
             title="حالة طلبات الاشتراك"
             slices={dashboard.paymentStatus}
@@ -69,8 +69,8 @@ export default async function AdminHomePage({ searchParams }: PageProps) {
         </div>
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-5">
-        <div className="xl:col-span-3">
+      <section className="grid min-w-0 gap-4 xl:grid-cols-5">
+        <div className="min-w-0 xl:col-span-3">
           <TimeSeriesChart
             title="الاشتراكات الجديدة"
             points={dashboard.enrollmentSeries}
@@ -78,7 +78,7 @@ export default async function AdminHomePage({ searchParams }: PageProps) {
             emptyLabel="لا اشتراكات جديدة في هذه الفترة"
           />
         </div>
-        <div className="xl:col-span-2">
+        <div className="min-w-0 xl:col-span-2">
           <TopCoursesPanel
             rows={dashboard.topCourses}
             rangeLabel={dashboard.rangeLabel}

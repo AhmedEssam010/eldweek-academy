@@ -13,16 +13,16 @@ type DataTableProps<T> = {
 
 export function DataTable<T>({ columns, rows, rowKey }: DataTableProps<T>) {
   return (
-    <div className="overflow-hidden rounded-2xl border border-white/10 bg-surface">
-      <div className="overflow-x-auto">
-        <table className="min-w-full text-sm">
+    <div className="w-full min-w-0 max-w-full overflow-hidden rounded-2xl border border-white/10 bg-surface">
+      <div className="w-full max-w-full overflow-x-auto">
+        <table className="w-full min-w-[36rem] text-sm">
           <thead className="bg-white/5 text-white/60">
             <tr>
               {columns.map((column) => (
                 <th
                   key={column.key}
                   scope="col"
-                  className={`px-4 py-3 text-start font-medium ${column.className ?? ""}`}
+                  className={`whitespace-nowrap px-3 py-3 text-start font-medium sm:px-4 ${column.className ?? ""}`}
                 >
                   {column.header}
                 </th>
@@ -38,7 +38,7 @@ export function DataTable<T>({ columns, rows, rowKey }: DataTableProps<T>) {
                 {columns.map((column) => (
                   <td
                     key={column.key}
-                    className={`px-4 py-3 align-middle ${column.className ?? ""}`}
+                    className={`max-w-[16rem] break-words px-3 py-3 align-middle sm:px-4 ${column.className ?? ""}`}
                   >
                     {column.render(row)}
                   </td>

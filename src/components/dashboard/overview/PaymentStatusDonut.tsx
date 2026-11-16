@@ -40,8 +40,8 @@ export function PaymentStatusDonut({ title, slices }: PaymentStatusDonutProps) {
   const active = arcs.find((a) => a.key === hover) ?? null;
 
   return (
-    <section className="rounded-2xl border border-white/10 bg-surface p-5">
-      <h3 className="text-base font-semibold text-white">{title}</h3>
+    <section className="min-w-0 rounded-2xl border border-white/10 bg-surface p-4 sm:p-5">
+      <h3 className="break-words text-base font-semibold text-white">{title}</h3>
 
       {total === 0 ? (
         <div className="mt-8 flex h-48 items-center justify-center rounded-xl border border-dashed border-white/10 bg-black/20 text-sm text-white/50">

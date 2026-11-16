@@ -96,9 +96,11 @@ export function VideoLibraryManager({
   }
 
   return (
-    <div className="space-y-6">
-      <section className="rounded-2xl border border-white/10 bg-surface p-5">
-        <h3 className="text-base font-semibold text-white">رفع فيديو جديد إلى المكتبة</h3>
+    <div className="w-full min-w-0 max-w-full space-y-6">
+      <section className="min-w-0 rounded-2xl border border-white/10 bg-surface p-4 sm:p-5">
+        <h3 className="break-words text-base font-semibold text-white">
+          رفع فيديو جديد إلى المكتبة
+        </h3>
         <p className="mt-2 text-sm leading-7 text-white/60">
           الرفع مباشر إلى Mux مع شريط تقدم حقيقي. لن يُعتبر الفيديو قابلاً للتشغيل حتى تصبح حالته «جاهز».
         </p>
@@ -124,18 +126,18 @@ export function VideoLibraryManager({
         )}
       </section>
 
-      <section className="rounded-2xl border border-white/10 bg-surface p-5 space-y-4">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
+      <section className="min-w-0 space-y-4 rounded-2xl border border-white/10 bg-surface p-4 sm:p-5">
+        <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+          <div className="min-w-0">
             <h3 className="text-base font-semibold text-white">الفيديوهات المرفوعة</h3>
             <p className="mt-1 text-xs text-white/45">{items.length} عنصر في المكتبة</p>
           </div>
-          <label className="block text-xs text-white/55">
+          <label className="block w-full min-w-0 text-xs text-white/55 sm:w-auto">
             بحث بالعنوان
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              className="mt-1 w-64 max-w-full rounded-xl border border-white/15 bg-background px-4 py-2.5 text-sm text-white"
+              className="mt-1 w-full rounded-xl border border-white/15 bg-background px-4 py-2.5 text-sm text-white sm:w-64"
               placeholder="ابحث..."
             />
           </label>
@@ -158,26 +160,26 @@ export function VideoLibraryManager({
                 key={item.id}
                 className="rounded-2xl border border-white/10 bg-background/40 p-4"
               >
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+                <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start">
                   {item.thumbnailUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={item.thumbnailUrl}
                       alt=""
-                      className="h-24 w-40 rounded-xl object-cover"
+                      className="h-24 w-full max-w-40 shrink-0 rounded-xl object-cover sm:w-40"
                     />
                   ) : (
-                    <div className="flex h-24 w-40 items-center justify-center rounded-xl bg-white/10 text-xs text-white/40">
+                    <div className="flex h-24 w-full max-w-40 shrink-0 items-center justify-center rounded-xl bg-white/10 text-xs text-white/40 sm:w-40">
                       بلا صورة مصغّرة
                     </div>
                   )}
                   <div className="min-w-0 flex-1 space-y-2">
                     {renameId === item.id ? (
-                      <div className="flex flex-wrap gap-2">
+                      <div className="flex min-w-0 flex-wrap gap-2">
                         <input
                           value={renameValue}
                           onChange={(event) => setRenameValue(event.target.value)}
-                          className="min-w-[12rem] flex-1 rounded-xl border border-white/15 bg-background px-3 py-2 text-sm text-white"
+                          className="min-w-0 w-full flex-1 rounded-xl border border-white/15 bg-background px-3 py-2 text-sm text-white sm:min-w-[12rem]"
                         />
                         <button
                           type="button"
