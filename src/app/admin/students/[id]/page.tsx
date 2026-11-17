@@ -5,7 +5,9 @@ import { SetupRequiredPanel } from "@/components/dashboard/SetupRequiredPanel";
 import { EmptyState } from "@/components/dashboard/EmptyState";
 import { ActiveStatusBadge } from "@/components/dashboard/StatusBadge";
 import { PaymentStatusBadge, EnrollmentStatusBadge } from "@/components/dashboard/PaymentBadges";
+import { ConfirmationDialog } from "@/components/dashboard/ConfirmationDialog";
 import { getStudentDetail } from "@/lib/dashboard/students-data";
+import { deleteStudentAction } from "@/lib/dashboard/student-actions";
 
 export const instant = false;
 
@@ -43,32 +45,50 @@ export default async function AdminStudentDetailPage({ params }: PageProps) {
         }
       />
 
-      <section className="rounded-2xl border border-white/10 bg-surface p-5">
-        <h3 className="text-base font-semibold text-white">معلومات الحساب</h3>
-        <dl className="mt-4 grid gap-3 sm:grid-cols-2 text-sm">
-          <div>
-            <dt className="text-white/50">الهاتف</dt>
-            <dd className="mt-1 font-mono text-white/80" dir="ltr">
-              {student.phoneNumber || "—"}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-white/50">الحالة</dt>
-            <dd className="mt-1">
-              <ActiveStatusBadge active={student.isActive} />
-            </dd>
-          </div>
-          <div>
-            <dt className="text-white/50">تاريخ التسجيل</dt>
-            <dd className="mt-1 text-white/80">
-              {new Date(student.createdAt).toLocaleDateString("ar-EG", {
-                year: "numeric",
-                month: "long",
-                day: "numeric",
-              })}
-            </dd>
-          </div>
-        </dl>
+      <section className="grid min-w-0 gap-4 lg:grid-cols-[1.2fr_1fr]">
+        <div className="rounded-2xl border border-white/10 bg-surface p-5">
+          <h3 className="text-base font-semibold text-white">معلومات الحساب</h3>
+          <dl className="mt-4 grid gap-3 sm:grid-cols-2 text-sm">
+            <div>
+              <dt className="text-white/50">الهاتف</dt>
+              <dd className="mt-1 font-mono text-white/80" dir="ltr">
+                {student.phoneNumber || "—"}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-white/50">الحالة</dt>
+              <dd className="mt-1">
+                <ActiveStatusBadge active={student.isActive} />
+              </dd>
+            </div>
+            <div>
+              <dt className="text-white/50">تاريخ التسجيل</dt>
+              <dd className="mt-1 text-white/80">
+                {new Date(student.createdAt).toLocaleDateString("ar-EG", {
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                })}
+              </dd>
+            </div>
+          </dl>
+        </div>
+
+        <div className="min-w-0 space-y-4 rounded-2xl border border-white/10 bg-surface p-5">
+          <h3 className="text-base font-semibold text-white">إجراءات حساسة</h3>
+          <p className="text-sm leading-7 text-white/65">
+            الحذف النهائي يزيل الحساب وتسجيلاته وطلبات دفعه وتقدّمه. لا يمكن التراجع
+            عن هذا الإجراء.
+          </p>
+          <ConfirmationDialog
+            triggerLabel="حذف الطالب نهائيًا"
+            title="تأكيد حذف الطالب"
+            description={`سيتم حذف «${student.fullName || "هذا الطالب"}» نهائيًا مع كل التسجيلات وطلبات الدفع وسجلات التقدّم المرتبطة به. سيُحرَّر رقم الهاتف لإعادة التسجيل إن لزم.`}
+            confirmLabel="حذف نهائي"
+            danger
+            onConfirm={deleteStudentAction.bind(null, student.id)}
+          />
+        </div>
       </section>
 
       <section className="rounded-2xl border border-white/10 bg-surface p-5">
