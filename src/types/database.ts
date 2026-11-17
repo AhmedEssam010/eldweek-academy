@@ -584,6 +584,32 @@ export type Database = {
         };
         Returns: undefined;
       };
+      admin_set_user_role: {
+        Args: {
+          p_user_id: string;
+          p_role: UserRole;
+          p_is_active?: boolean;
+          p_can_create_course_drafts?: boolean;
+        };
+        Returns: undefined;
+      };
+      upsert_course_staff_assignment: {
+        Args: {
+          p_course_id: string;
+          p_teacher_id: string;
+          p_can_edit_content: boolean;
+          p_can_manage_exams: boolean;
+          p_can_view_student_progress: boolean;
+        };
+        Returns: string;
+      };
+      revoke_course_staff_assignment: {
+        Args: {
+          p_course_id: string;
+          p_teacher_id: string;
+        };
+        Returns: undefined;
+      };
     };
     Enums: {
       user_role: UserRole;

@@ -1,9 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireAdmin } from "@/lib/auth/guards";
+import { requireAdmin, requireAuthenticatedUser, requireTeacher } from "@/lib/auth/guards";
 import { getAuthReadiness } from "@/lib/auth/readiness";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceRoleClient } from "@/lib/supabase/service";
 import {
   buildCourseSlug,
   isValidCourseSlug,
@@ -12,34 +13,7 @@ import { parseAcademicSemester } from "@/lib/learning/course-structure";
 import { assessCourseDeletion } from "@/lib/dashboard/course-deletion";
 import type { CourseFormActionResult } from "@/lib/dashboard/types";
 
-export type MutationResult = {
-  ok: false;
-  code: "setup_required" | "forbidden_until_ready";
-  message: string;
-};
-
 export type { CourseFormActionResult };
-
-/**
- * عمليات غير مفعّلة في هذه المرحلة (مدرّسون / نشر عام).
- */
-function blockedMutation(actionLabel: string): MutationResult {
-  const readiness = getAuthReadiness();
-
-  if (!readiness.dbSchemaReady) {
-    return {
-      ok: false,
-      code: "setup_required",
-      message: `عملية «${actionLabel}» غير متاحة لأن مخطط قاعدة البيانات غير جاهز بعد.`,
-    };
-  }
-
-  return {
-    ok: false,
-    code: "forbidden_until_ready",
-    message: `عملية «${actionLabel}» غير مفعّلة في هذه المرحلة.`,
-  };
-}
 
 function fail(message: string): CourseFormActionResult {
   return { ok: false, message };
@@ -82,26 +56,6 @@ async function requireAdminCourseWriter() {
   }
 
   return { ok: true as const, admin, supabase };
-}
-
-export async function inviteTeacherAction(): Promise<MutationResult> {
-  return blockedMutation("دعوة مدرّس");
-}
-
-export async function updateTeacherPermissionsAction(): Promise<MutationResult> {
-  return blockedMutation("تحديث صلاحيات المدرّس");
-}
-
-export async function assignTeacherToCourseAction(): Promise<MutationResult> {
-  return blockedMutation("تعيين مدرّس لكورس");
-}
-
-export async function revokeTeacherAssignmentAction(): Promise<MutationResult> {
-  return blockedMutation("إزالة تعيين مدرّس");
-}
-
-export async function deactivateTeacherAction(): Promise<MutationResult> {
-  return blockedMutation("تعطيل مدرّس");
 }
 
 export async function createCourseDraftAction(
@@ -462,4 +416,199 @@ export async function deleteCourseAction(
     `تم حذف الكورس «${assessed.assessment.title}» نهائيًا.`,
     "/admin/courses",
   );
+}
+
+async function requireTeacherDraftCreator() {
+  const readiness = getAuthReadiness();
+  if (!readiness.dbSchemaReady) {
+    return {
+      ok: false as const,
+      result: fail(
+        "قاعدة البيانات غير جاهزة بعد. أكّد NEXT_PUBLIC_DB_SCHEMA_READY بعد التحقق اليدوي.",
+      ),
+    };
+  }
+
+  const teacher = await requireTeacher();
+  const supabase = await createClient();
+  if (!supabase) {
+    return { ok: false as const, result: fail("إعدادات Supabase غير مكتملة.") };
+  }
+
+  const { data: profile, error } = await supabase
+    .from("profiles")
+    .select("can_create_course_drafts, is_active, role")
+    .eq("id", teacher.userId)
+    .maybeSingle();
+
+  if (error || !profile || profile.role !== "teacher" || !profile.is_active) {
+    return { ok: false as const, result: fail("حساب المدرّس غير نشط أو غير صالح.") };
+  }
+  if (!profile.can_create_course_drafts) {
+    return {
+      ok: false as const,
+      result: fail("ليست لديك صلاحية إنشاء مسودات كورسات. اطلبها من المالك."),
+    };
+  }
+
+  return { ok: true as const, teacher, supabase };
+}
+
+/** إنشاء مسودة كورس بواسطة مدرّس مصرّح له بـ can_create_course_drafts. */
+export async function createTeacherCourseDraftAction(
+  formData: FormData,
+): Promise<CourseFormActionResult> {
+  const access = await requireTeacherDraftCreator();
+  if (!access.ok) return access.result;
+
+  const title = String(formData.get("title") ?? "").trim();
+  const description = String(formData.get("description") ?? "").trim();
+  const thumbnailPath = String(formData.get("thumbnail_path") ?? "").trim();
+  const slugInput = String(formData.get("slug") ?? "").trim();
+  const academicSemester = parseAcademicSemester(formData.get("academic_semester"));
+
+  if (title.length < 3) {
+    return fail("عنوان الكورس مطلوب (3 أحرف على الأقل).");
+  }
+  if (!academicSemester) {
+    return fail("اختر الترم الدراسي: الأول أو الثاني.");
+  }
+
+  const slug = buildCourseSlug(title, slugInput);
+  if (!isValidCourseSlug(slug)) {
+    return fail(
+      "معرّف الكورس (slug) غير صالح. استخدم أحرفًا إنجليزية صغيرة وأرقامًا وشرطات فقط، أو اتركه فارغًا للتوليد التلقائي.",
+    );
+  }
+
+  const { data: courseId, error } = await access.supabase.rpc("create_course_draft", {
+    p_title: title,
+    p_slug: slug,
+    p_description: description,
+    p_thumbnail_path: thumbnailPath.length > 0 ? thumbnailPath : null,
+  });
+
+  if (error || !courseId) {
+    const raw = (error?.message || "").toLowerCase();
+    if (raw.includes("duplicate") || raw.includes("unique")) {
+      return fail("معرّف الكورس (slug) مستخدم بالفعل. غيّره أو اتركه للتوليد التلقائي.");
+    }
+    if (raw.includes("not_allowed")) {
+      return fail("ليست لديك صلاحية إنشاء مسودات كورسات.");
+    }
+    return fail("تعذر إنشاء المسودة. تحقق من الصلاحيات وقيود البيانات.");
+  }
+
+  await access.supabase
+    .from("courses")
+    .update({ academic_semester: academicSemester })
+    .eq("id", courseId);
+
+  // create_course_draft لا يُنشئ تعيينًا تلقائيًا؛ بدون تعيين يفشل تعديل المحتوى وارسال المراجعة.
+  // service_role يُكمّل المسار دون هجرة جديدة (مسودة SQL ذرّية بانتظار الموافقة إن رُغب).
+  const service = createServiceRoleClient();
+  if (service) {
+    const { error: assignError } = await service
+      .from("course_staff_assignments")
+      .upsert(
+        {
+          course_id: courseId,
+          teacher_id: access.teacher.userId,
+          can_edit_content: true,
+          can_manage_exams: false,
+          can_view_student_progress: false,
+        },
+        { onConflict: "course_id,teacher_id" },
+      );
+    if (assignError) {
+      console.error("[teacher-draft-auto-assign]", {
+        code: assignError.code,
+        message: assignError.message?.slice(0, 180),
+      });
+    }
+  }
+
+  revalidatePath("/teacher");
+  revalidatePath("/teacher/courses");
+  revalidatePath(`/teacher/courses/${courseId}`);
+  return ok(
+    "تم إنشاء مسودة الكورس وتعيينك عليها لتعديل المحتوى. أرسلها للمراجعة بعد اكتمال المحتوى.",
+    `/teacher/courses/${courseId}`,
+  );
+}
+
+/**
+ * إرسال كورس للمراجعة (pending_review). النشر النهائي للمالك فقط.
+ */
+export async function submitCourseForReviewAction(
+  courseId: string,
+): Promise<CourseFormActionResult> {
+  const readiness = getAuthReadiness();
+  if (!readiness.dbSchemaReady) {
+    return fail("قاعدة البيانات غير جاهزة بعد.");
+  }
+
+  const user = await requireAuthenticatedUser({ nextPath: "/teacher" });
+  const supabase = await createClient();
+  if (!supabase) return fail("إعدادات Supabase غير مكتملة.");
+
+  const id = String(courseId ?? "").trim();
+  if (!id) return fail("معرّف الكورس مفقود.");
+
+  if (user.role === "super_admin") {
+    const { error } = await supabase
+      .from("courses")
+      .update({ status: "pending_review" })
+      .eq("id", id)
+      .in("status", ["draft", "pending_review"]);
+    if (error) return fail("تعذر إرسال الكورس للمراجعة.");
+    revalidateCourseCatalogPaths(id);
+    revalidatePath(`/admin/courses/${id}`);
+    return ok("الكورس بانتظار المراجعة/النشر.");
+  }
+
+  if (user.role !== "teacher") {
+    return fail("إرسال المراجعة متاح للمدرّس المعيّن أو المالك فقط.");
+  }
+
+  const { data: assignment } = await supabase
+    .from("course_staff_assignments")
+    .select("can_edit_content")
+    .eq("course_id", id)
+    .eq("teacher_id", user.userId)
+    .maybeSingle();
+
+  if (!assignment?.can_edit_content) {
+    return fail("ليست لديك صلاحية تعديل محتوى هذا الكورس.");
+  }
+
+  const { data: course } = await supabase
+    .from("courses")
+    .select("id, status")
+    .eq("id", id)
+    .maybeSingle();
+  if (!course) return fail("لم يُعثر على الكورس.");
+  if (course.status === "published") {
+    return fail("الكورس منشور بالفعل. التغييرات بعد النشر تتم عبر المالك.");
+  }
+  if (course.status === "archived") {
+    return fail("الكورس مؤرشف ولا يمكن إرساله للمراجعة.");
+  }
+  if (course.status === "pending_review") {
+    return ok("الكورس بالفعل بانتظار مراجعة المالك.");
+  }
+
+  const { error } = await supabase
+    .from("courses")
+    .update({ status: "pending_review" })
+    .eq("id", id)
+    .eq("status", "draft");
+
+  if (error) return fail("تعذر إرسال الكورس للمراجعة.");
+
+  revalidatePath("/teacher/courses");
+  revalidatePath(`/teacher/courses/${id}`);
+  revalidatePath("/admin/courses");
+  revalidatePath(`/admin/courses/${id}`);
+  return ok("أُرسل الكورس لمراجعة المالك. لن يظهر للطلاب حتى ينشره المالك.");
 }

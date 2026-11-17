@@ -192,6 +192,22 @@ export async function listTeachers(options?: {
     return unavailableResult([]);
   }
 
+  const teacherIds = (data ?? []).map((row) => row.id);
+  const assignmentCountByTeacher = new Map<string, number>();
+  if (teacherIds.length > 0) {
+    const { data: assignmentRows } = await access.supabase
+      .from("course_staff_assignments")
+      .select("teacher_id")
+      .in("teacher_id", teacherIds);
+    for (const row of assignmentRows ?? []) {
+      const tid = row.teacher_id as string;
+      assignmentCountByTeacher.set(
+        tid,
+        (assignmentCountByTeacher.get(tid) ?? 0) + 1,
+      );
+    }
+  }
+
   const query = options?.query?.trim().toLowerCase() ?? "";
   const mapped: TeacherListItem[] = (data ?? []).map((row) => ({
     id: row.id,
@@ -200,6 +216,7 @@ export async function listTeachers(options?: {
     isActive: Boolean(row.is_active),
     canCreateCourseDrafts: Boolean(row.can_create_course_drafts),
     createdAt: row.created_at,
+    assignedCoursesCount: assignmentCountByTeacher.get(row.id) ?? 0,
   }));
 
   const filtered = query
@@ -270,6 +287,7 @@ export async function getTeacherDetail(
       isActive: Boolean(profile.is_active),
       canCreateCourseDrafts: Boolean(profile.can_create_course_drafts),
       createdAt: profile.created_at,
+      assignedCoursesCount: (assignments ?? []).length,
       assignments: (assignments ?? []).map((row) => {
         const course = Array.isArray(row.courses) ? row.courses[0] : row.courses;
         return {

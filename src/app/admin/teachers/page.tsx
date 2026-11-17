@@ -119,6 +119,11 @@ export default async function AdminTeachersPage({
                 row.canCreateCourseDrafts ? "مفعّل" : "غير مفعّل",
             },
             {
+              key: "courses",
+              header: "الكورسات",
+              render: (row) => String(row.assignedCoursesCount),
+            },
+            {
               key: "actions",
               header: "إدارة",
               render: (row) => (

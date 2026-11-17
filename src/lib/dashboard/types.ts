@@ -26,6 +26,7 @@ export type TeacherListItem = {
   isActive: boolean;
   canCreateCourseDrafts: boolean;
   createdAt: string;
+  assignedCoursesCount: number;
 };
 
 export type TeacherDetail = TeacherListItem & {

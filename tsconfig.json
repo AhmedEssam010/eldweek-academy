@@ -36,6 +36,7 @@
     "src/lib/learning/playback-policy.test.ts",
     "src/lib/learning/mux-policy.test.ts",
     "src/lib/learning/youtube-policy.test.ts",
-    "src/lib/learning/course-materials.test.ts"
+    "src/lib/learning/course-materials.test.ts",
+    "src/lib/dashboard/teacher-password.test.ts"
   ]
 }

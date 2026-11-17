@@ -6,6 +6,7 @@ import { DataTable } from "@/components/dashboard/DataTable";
 import { CourseStatusBadge } from "@/components/dashboard/StatusBadge";
 import { requireTeacher } from "@/lib/auth/guards";
 import { listTeacherAssignedCourses } from "@/lib/dashboard/data";
+import { createClient } from "@/lib/supabase/server";
 
 export const metadata = {
   title: "كورساتي | المهندس أحمد الدويك",
@@ -15,13 +16,37 @@ export const instant = false;
 
 export default async function TeacherCoursesPage() {
   const user = await requireTeacher();
-  const courses = await listTeacherAssignedCourses(user.userId);
+  const [courses, profile] = await Promise.all([
+    listTeacherAssignedCourses(user.userId),
+    (async () => {
+      const supabase = await createClient();
+      if (!supabase) return null;
+      const { data } = await supabase
+        .from("profiles")
+        .select("can_create_course_drafts")
+        .eq("id", user.userId)
+        .maybeSingle();
+      return data;
+    })(),
+  ]);
+
+  const canCreateDrafts = Boolean(profile?.can_create_course_drafts);
 
   return (
-    <div className="space-y-6">
+    <div className="w-full min-w-0 max-w-full space-y-6">
       <PageHeader
         title="كورساتي"
         description="قائمة مبنية على التعيينات الصريحة فقط. لا يوجد اعتماد على created_by كمصدر صلاحية."
+        actions={
+          canCreateDrafts ? (
+            <Link
+              href="/teacher/courses/new"
+              className="rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-secondary"
+            >
+              مسودة جديدة
+            </Link>
+          ) : null
+        }
       />
 
       {(courses.availability === "setup_required" ||
@@ -30,7 +55,20 @@ export default async function TeacherCoursesPage() {
       )}
 
       {courses.data.length === 0 ? (
-        <EmptyState title="لا توجد كورسات" description={courses.message} />
+        <EmptyState
+          title="لا توجد كورسات"
+          description={courses.message}
+          action={
+            canCreateDrafts ? (
+              <Link
+                href="/teacher/courses/new"
+                className="rounded-xl border border-white/15 px-4 py-2 text-sm text-white"
+              >
+                إنشاء مسودة
+              </Link>
+            ) : undefined
+          }
+        />
       ) : (
         <DataTable
           rows={courses.data}
