@@ -121,6 +121,7 @@ export function VideoLibraryManager({
             <div className="mt-4">
               <MuxVideoUploader
                 requireTitle
+                persistenceKey="video-library"
                 titlePlaceholder="مثال: محاضرة التفاضل الأولى"
                 submitLabel="رفع إلى المكتبة"
                 createUpload={async ({ title }) =>

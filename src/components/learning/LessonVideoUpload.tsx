@@ -27,6 +27,7 @@ export function LessonVideoUpload({
       <MuxVideoUploader
         initialTitle={lessonTitle || "فيديو درس"}
         requireTitle
+        persistenceKey={`lesson-upload:${lessonId}`}
         titlePlaceholder="عنوان يظهر في مكتبة الفيديو"
         submitLabel="رفع فيديو جديد وربطه بالدرس"
         createUpload={async ({ title }) =>
