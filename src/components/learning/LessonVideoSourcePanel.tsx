@@ -19,7 +19,7 @@ type LessonVideoSourcePanelProps = {
   initialSource: "none" | "mux" | "youtube";
   youtubeVideoId: string | null;
   hasMuxAsset: boolean;
-  muxPreview: { playbackId: string; token: string } | null;
+  muxPreview: { playbackId: string; token: string; expiresAt: string } | null;
   setupStatusLabel: string;
   setupMessage: string;
 };
@@ -112,6 +112,11 @@ export function LessonVideoSourcePanel({
               <ProtectedMuxPlayer
                 playbackId={muxPreview.playbackId}
                 token={muxPreview.token}
+                expiresAt={muxPreview.expiresAt}
+                lessonId={lessonId}
+                courseId={courseId}
+                semesterId={semesterId}
+                audience="staff"
               />
             </div>
           ) : null}
@@ -145,6 +150,11 @@ export function LessonVideoSourcePanel({
               <ProtectedMuxPlayer
                 playbackId={muxPreview.playbackId}
                 token={muxPreview.token}
+                expiresAt={muxPreview.expiresAt}
+                lessonId={lessonId}
+                courseId={courseId}
+                semesterId={semesterId}
+                audience="staff"
               />
             </div>
           ) : null}

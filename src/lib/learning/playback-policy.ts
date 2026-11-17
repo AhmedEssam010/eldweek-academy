@@ -4,10 +4,24 @@ type EnrollmentStatus = "active" | "expired" | "suspended";
 type ProductType = "full_course" | "semester";
 type UserRole = "super_admin" | "teacher" | "student";
 
-/** مدة المنحة المقصودة عند تفعيل مزوّد لاحقًا. لا يُصدر رابط في هذه المرحلة. */
-export const PLAYBACK_GRANT_TTL_SECONDS = 5 * 60;
+/**
+ * مدة JWT التشغيل الموقّع.
+ * كانت 5 دقائق فكانت تسبب فشلًا متوقعًا عند العودة للتبويب دون تجديد.
+ * 15 دقيقة مع تجديد استباقي على العميل توازن بين الأمان والاستقرار.
+ */
+export const PLAYBACK_GRANT_TTL_SECONDS = 15 * 60;
+/** جدّد قبل الانتهاء بهذه الثواني (تعويض تأخير الشبكة وتقييد المؤقّتات في الخلفية). */
+export const PLAYBACK_TOKEN_REFRESH_SKEW_SECONDS = 90;
 export const PLAYBACK_RATE_LIMIT = 30;
 export const PLAYBACK_RATE_WINDOW_MS = 60_000;
+
+/** صيغة مدة يقبلها Mux JWT signer من الثواني. */
+export function muxJwtExpirationLabel(ttlSeconds: number): string {
+  const seconds = Math.max(1, Math.floor(ttlSeconds));
+  if (seconds % 3600 === 0) return `${seconds / 3600}h`;
+  if (seconds % 60 === 0) return `${seconds / 60}m`;
+  return `${seconds}s`;
+}
 
 export type PlaybackActor = UserRole | "anonymous";
 

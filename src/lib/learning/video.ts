@@ -455,6 +455,7 @@ export async function inspectLessonVideoSetup(lessonId: string): Promise<{
 export async function getStaffLessonPreview(lessonId: string): Promise<{
   playbackId: string;
   token: string;
+  expiresAt: string;
 } | null> {
   const profile = await getProfileAuthState();
   if (profile.status !== "authenticated") return null;
@@ -485,7 +486,11 @@ export async function getStaffLessonPreview(lessonId: string): Promise<{
   try {
     const signed = await issueSignedPlayback(lessonId);
     if (signed.state !== "ready") return null;
-    return { playbackId: signed.playbackId, token: signed.token };
+    return {
+      playbackId: signed.playbackId,
+      token: signed.token,
+      expiresAt: signed.expiresAt,
+    };
   } catch {
     return null;
   }

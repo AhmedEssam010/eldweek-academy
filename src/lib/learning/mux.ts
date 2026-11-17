@@ -1,7 +1,10 @@
 import "server-only";
 
 import Mux from "@mux/mux-node";
-import { PLAYBACK_GRANT_TTL_SECONDS } from "@/lib/learning/playback-policy";
+import {
+  muxJwtExpirationLabel,
+  PLAYBACK_GRANT_TTL_SECONDS,
+} from "@/lib/learning/playback-policy";
 import {
   decodeMuxAssetId,
   encodeMuxAssetId,
@@ -585,7 +588,7 @@ export async function issueSignedPlayback(lessonId: string): Promise<
     if (library.status === "ready" && library.mux_playback_id && library.mux_asset_id) {
       const token = await mux.jwt.signPlaybackId(library.mux_playback_id, {
         type: "video",
-        expiration: "5m",
+        expiration: muxJwtExpirationLabel(PLAYBACK_GRANT_TTL_SECONDS),
       });
       const expiresAt = new Date(Date.now() + PLAYBACK_GRANT_TTL_SECONDS * 1000).toISOString();
       return {
@@ -630,7 +633,7 @@ export async function issueSignedPlayback(lessonId: string): Promise<
 
   const token = await mux.jwt.signPlaybackId(playbackId, {
     type: "video",
-    expiration: "5m",
+    expiration: muxJwtExpirationLabel(PLAYBACK_GRANT_TTL_SECONDS),
   });
   const expiresAt = new Date(Date.now() + PLAYBACK_GRANT_TTL_SECONDS * 1000).toISOString();
   return {

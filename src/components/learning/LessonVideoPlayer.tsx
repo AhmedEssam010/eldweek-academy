@@ -79,6 +79,11 @@ export function LessonVideoPlayer({
               <ProtectedMuxPlayer
                 playbackId={playback.muxPlaybackId}
                 token={playback.muxPlaybackToken}
+                expiresAt={playback.expiresAt}
+                lessonId={lesson.id}
+                courseId={lesson.courseId}
+                semesterId={lesson.semesterId}
+                audience="student"
               />
             )}
           </div>
