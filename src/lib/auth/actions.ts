@@ -39,7 +39,7 @@ function redirectAfterAuth(
     redirect("/auth/inactive");
   }
   if (role === "super_admin") redirect("/admin");
-  if (role === "teacher") redirect("/teacher");
+  if (role === "teacher") redirect("/teacher/video-library");
   const safeNext = sanitizeNextPath(nextPath);
   if (role === "student" && safeNext) redirect(safeNext);
   redirect("/student");

@@ -59,14 +59,9 @@ export const adminNavItems: DashboardNavItem[] = [
 
 export const teacherNavItems: DashboardNavItem[] = [
   {
-    href: "/teacher",
-    label: "نظرة عامة",
-    description: "كورساتك المعيّنة",
-  },
-  {
-    href: "/teacher/courses",
-    label: "كورساتي",
-    description: "المحتوى المصرّح به",
+    href: "/teacher/video-library",
+    label: "مكتبة الفيديو",
+    description: "رفع الفيديوهات ومتابعة حالتها",
   },
 ];
 

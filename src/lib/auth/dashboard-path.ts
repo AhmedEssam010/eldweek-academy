@@ -2,7 +2,7 @@ import type { UserRole } from "@/types/database";
 
 export function dashboardHrefForRole(role: UserRole): string {
   if (role === "super_admin") return "/admin";
-  if (role === "teacher") return "/teacher";
+  if (role === "teacher") return "/teacher/video-library";
   return "/student";
 }
 

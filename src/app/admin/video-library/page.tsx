@@ -42,7 +42,7 @@ export default async function AdminVideoLibraryPage() {
     <div className="space-y-6">
       <PageHeader
         title="مكتبة الفيديو"
-        description="مكتبة Mux العامة للمنصة — للمالك فقط في هذه المرحلة. المدرّسون يربطون الفيديوهات الجاهزة من محرر الدرس دون إدارة المكتبة."
+        description="مكتبة Mux المشتركة للمنصة. المدرّسون يمكنهم الرفع والمشاهدة فقط؛ الحذف وإعادة التسمية للمالك. كل ما يرفعه المدرّس يظهر هنا تلقائيًا."
       />
       {!mux.ready ? (
         <SetupRequiredPanel
@@ -53,6 +53,11 @@ export default async function AdminVideoLibraryPage() {
         items={items}
         muxReady={mux.ready}
         loadError={loadError}
+        capabilities={{
+          canUpload: true,
+          canRename: true,
+          canDelete: true,
+        }}
       />
     </div>
   );

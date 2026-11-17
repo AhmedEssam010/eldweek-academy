@@ -11,10 +11,17 @@ import {
 } from "@/lib/learning/library-actions";
 import type { VideoLibraryListItem } from "@/lib/learning/video-library-types";
 
+export type VideoLibraryCapabilities = {
+  canUpload?: boolean;
+  canRename?: boolean;
+  canDelete?: boolean;
+};
+
 type VideoLibraryManagerProps = {
   items: VideoLibraryListItem[];
   muxReady: boolean;
   loadError?: string | null;
+  capabilities?: VideoLibraryCapabilities;
 };
 
 const statusLabel: Record<string, string> = {
@@ -47,7 +54,12 @@ export function VideoLibraryManager({
   items,
   muxReady,
   loadError,
+  capabilities,
 }: VideoLibraryManagerProps) {
+  const canUpload = capabilities?.canUpload ?? true;
+  const canRename = capabilities?.canRename ?? true;
+  const canDelete = capabilities?.canDelete ?? true;
+
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [message, setMessage] = useState<string | null>(null);
@@ -97,34 +109,36 @@ export function VideoLibraryManager({
 
   return (
     <div className="w-full min-w-0 max-w-full space-y-6">
-      <section className="min-w-0 rounded-2xl border border-white/10 bg-surface p-4 sm:p-5">
-        <h3 className="break-words text-base font-semibold text-white">
-          رفع فيديو جديد إلى المكتبة
-        </h3>
-        <p className="mt-2 text-sm leading-7 text-white/60">
-          الرفع مباشر إلى Mux مع شريط تقدم حقيقي. لن يُعتبر الفيديو قابلاً للتشغيل حتى تصبح حالته «جاهز».
-        </p>
-        {muxReady ? (
-          <div className="mt-4">
-            <MuxVideoUploader
-              requireTitle
-              titlePlaceholder="مثال: محاضرة التفاضل الأولى"
-              submitLabel="رفع إلى المكتبة"
-              createUpload={async ({ title }) =>
-                createLibraryVideoUploadAction({ title })
-              }
-              syncUpload={async ({ uploadId, videoLibraryId }) =>
-                syncLibraryVideoUploadAction({ uploadId, videoLibraryId })
-              }
-              onComplete={() => router.refresh()}
-            />
-          </div>
-        ) : (
-          <p className="mt-3 text-sm text-amber-200/80">
-            مفاتيح Mux أو مفتاح الخدمة غير مضبوطة على الخادم.
+      {canUpload ? (
+        <section className="min-w-0 rounded-2xl border border-white/10 bg-surface p-4 sm:p-5">
+          <h3 className="break-words text-base font-semibold text-white">
+            رفع فيديو جديد إلى المكتبة
+          </h3>
+          <p className="mt-2 text-sm leading-7 text-white/60">
+            الرفع مباشر إلى Mux مع شريط تقدم حقيقي. لن يُعتبر الفيديو قابلاً للتشغيل حتى تصبح حالته «جاهز».
           </p>
-        )}
-      </section>
+          {muxReady ? (
+            <div className="mt-4">
+              <MuxVideoUploader
+                requireTitle
+                titlePlaceholder="مثال: محاضرة التفاضل الأولى"
+                submitLabel="رفع إلى المكتبة"
+                createUpload={async ({ title }) =>
+                  createLibraryVideoUploadAction({ title })
+                }
+                syncUpload={async ({ uploadId, videoLibraryId }) =>
+                  syncLibraryVideoUploadAction({ uploadId, videoLibraryId })
+                }
+                onComplete={() => router.refresh()}
+              />
+            </div>
+          ) : (
+            <p className="mt-3 text-sm text-amber-200/80">
+              مفاتيح Mux أو مفتاح الخدمة غير مضبوطة على الخادم.
+            </p>
+          )}
+        </section>
+      ) : null}
 
       <section className="min-w-0 space-y-4 rounded-2xl border border-white/10 bg-surface p-4 sm:p-5">
         <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
@@ -150,7 +164,9 @@ export function VideoLibraryManager({
         {filtered.length === 0 ? (
           <p className="text-sm text-white/55">
             {items.length === 0
-              ? "المكتبة فارغة. ارفع أول فيديو أعلاه."
+              ? canUpload
+                ? "المكتبة فارغة. ارفع أول فيديو أعلاه."
+                : "المكتبة فارغة حاليًا."
               : "لا نتائج مطابقة لبحثك."}
           </p>
         ) : (
@@ -174,7 +190,7 @@ export function VideoLibraryManager({
                     </div>
                   )}
                   <div className="min-w-0 flex-1 space-y-2">
-                    {renameId === item.id ? (
+                    {canRename && renameId === item.id ? (
                       <div className="flex min-w-0 flex-wrap gap-2">
                         <input
                           value={renameValue}
@@ -212,27 +228,33 @@ export function VideoLibraryManager({
                           }`
                         : "غير مستخدم في أي درس حاليًا"}
                     </p>
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        disabled={pending}
-                        onClick={() => {
-                          setRenameId(item.id);
-                          setRenameValue(item.title);
-                        }}
-                        className="rounded-xl border border-white/15 px-3 py-1.5 text-xs text-white/85 hover:bg-white/5"
-                      >
-                        إعادة تسمية
-                      </button>
-                      <button
-                        type="button"
-                        disabled={pending || item.lessonCount > 0}
-                        onClick={() => confirmDelete(item)}
-                        className="rounded-xl border border-red-400/30 px-3 py-1.5 text-xs text-red-200 disabled:opacity-40 hover:bg-red-500/10"
-                      >
-                        حذف
-                      </button>
-                    </div>
+                    {canRename || canDelete ? (
+                      <div className="flex flex-wrap gap-2">
+                        {canRename ? (
+                          <button
+                            type="button"
+                            disabled={pending}
+                            onClick={() => {
+                              setRenameId(item.id);
+                              setRenameValue(item.title);
+                            }}
+                            className="rounded-xl border border-white/15 px-3 py-1.5 text-xs text-white/85 hover:bg-white/5"
+                          >
+                            إعادة تسمية
+                          </button>
+                        ) : null}
+                        {canDelete ? (
+                          <button
+                            type="button"
+                            disabled={pending || item.lessonCount > 0}
+                            onClick={() => confirmDelete(item)}
+                            className="rounded-xl border border-red-400/30 px-3 py-1.5 text-xs text-red-200 disabled:opacity-40 hover:bg-red-500/10"
+                          >
+                            حذف
+                          </button>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               </li>

@@ -50,7 +50,7 @@ export async function requireRole(
   if (!allowed.includes(user.role)) {
     // لا ترفع الصلاحيات؛ أعد التوجيه لمسار الدور الصحيح إن أمكن
     if (user.role === "super_admin") redirect("/admin");
-    if (user.role === "teacher") redirect("/teacher");
+    if (user.role === "teacher") redirect("/teacher/video-library");
     redirect("/student");
   }
 
@@ -64,7 +64,7 @@ export async function requireStudent(options?: { nextPath?: string }) {
 }
 
 export async function requireTeacher() {
-  return requireRole(["teacher"], { nextPath: "/teacher" });
+  return requireRole(["teacher"], { nextPath: "/teacher/video-library" });
 }
 
 export async function requireAdmin() {

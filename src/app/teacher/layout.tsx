@@ -16,7 +16,7 @@ export default async function TeacherLayout({
   return (
     <DashboardLayout
       title="لوحة المدرّس"
-      roleLabel="مدرّس فريق المنصة"
+      roleLabel="رفع فيديوهات المنصة"
       fullName={user.fullName || "مدرّس"}
       navItems={teacherNavItems}
     >

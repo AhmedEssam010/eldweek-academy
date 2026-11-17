@@ -19,7 +19,7 @@ const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MUX_ID = /^[A-Za-z0-9]{8,80}$/;
 
-async function requireSuperAdmin() {
+async function requireAuthenticatedStaff() {
   if (!getAuthReadiness().dbSchemaReady) {
     return { ok: false as const, message: "قاعدة البيانات غير جاهزة بعد." };
   }
@@ -27,13 +27,34 @@ async function requireSuperAdmin() {
   if (profile.status !== "authenticated") {
     return { ok: false as const, message: "يلزم تسجيل الدخول." };
   }
-  if (profile.role !== "super_admin") {
+  if (profile.role !== "super_admin" && profile.role !== "teacher") {
     return {
       ok: false as const,
-      message: "إدارة مكتبة الفيديو متاحة للمالك فقط في هذه المرحلة.",
+      message: "مكتبة الفيديو متاحة للمالك والمدرّسين فقط.",
     };
   }
-  return { ok: true as const, userId: profile.userId };
+  return {
+    ok: true as const,
+    userId: profile.userId,
+    role: profile.role as "super_admin" | "teacher",
+  };
+}
+
+async function requireSuperAdmin() {
+  const access = await requireAuthenticatedStaff();
+  if (!access.ok) return access;
+  if (access.role !== "super_admin") {
+    return {
+      ok: false as const,
+      message: "حذف وإعادة تسمية فيديوهات المكتبة متاحان للمالك فقط.",
+    };
+  }
+  return { ok: true as const, userId: access.userId };
+}
+
+function revalidateLibraryPaths() {
+  revalidatePath("/admin/video-library");
+  revalidatePath("/teacher/video-library");
 }
 
 function readMuxUploadFailure(error: unknown) {
@@ -52,22 +73,11 @@ export async function listVideoLibraryAction(input?: {
   | { ok: true; items: VideoLibraryListItem[] }
   | { ok: false; message: string }
 > {
-  const profile = await getProfileAuthState();
-  if (profile.status !== "authenticated") {
-    return { ok: false, message: "يلزم تسجيل الدخول." };
-  }
-  if (profile.role !== "super_admin" && profile.role !== "teacher") {
-    return { ok: false, message: "ليست لديك صلاحية عرض المكتبة." };
-  }
-  // المعلمون: قائمة الجاهز فقط للربط داخل محرر الدرس
-  const readyOnly =
-    profile.role === "teacher" ? true : Boolean(input?.readyOnly);
-  if (profile.role === "teacher" && !readyOnly) {
-    return { ok: false, message: "المدرّس يرى الفيديوهات الجاهزة فقط للربط." };
-  }
+  const access = await requireAuthenticatedStaff();
+  if (!access.ok) return access;
   const items = await listVideoLibrary({
     search: input?.search,
-    readyOnly,
+    readyOnly: Boolean(input?.readyOnly),
   });
   return { ok: true, items };
 }
@@ -97,7 +107,7 @@ export async function createLibraryVideoUploadAction(input: {
   | { ok: true; uploadId: string; uploadUrl: string; videoLibraryId: string }
   | { ok: false; message: string }
 > {
-  const access = await requireSuperAdmin();
+  const access = await requireAuthenticatedStaff();
   if (!access.ok) return access;
   if (!getMuxReadiness().ready) {
     return { ok: false, message: "مفاتيح Mux أو مفتاح الخدمة غير مضبوطة على الخادم." };
@@ -147,7 +157,7 @@ export async function syncLibraryVideoUploadAction(input: {
   | { ok: true; state: "waiting" | "processing" | "ready" | "error"; message: string }
   | { ok: false; message: string }
 > {
-  const access = await requireSuperAdmin();
+  const access = await requireAuthenticatedStaff();
   if (!access.ok) return access;
   if (!UUID.test(input.videoLibraryId) || !MUX_ID.test(input.uploadId)) {
     return { ok: false, message: "بيانات المزامنة غير صالحة." };
@@ -157,7 +167,7 @@ export async function syncLibraryVideoUploadAction(input: {
       videoLibraryId: input.videoLibraryId,
       uploadId: input.uploadId,
     });
-    revalidatePath("/admin/video-library");
+    revalidateLibraryPaths();
     return { ok: true, state: result.state, message: result.message };
   } catch {
     return { ok: false, message: "تعذر مزامنة حالة الفيديو." };
@@ -175,7 +185,7 @@ export async function renameLibraryVideoAction(input: {
   }
   const result = await renameVideoAsset(input.videoLibraryId, input.title);
   if (!result.ok) return result;
-  revalidatePath("/admin/video-library");
+  revalidateLibraryPaths();
   return { ok: true, message: "تم تحديث العنوان." };
 }
 
@@ -189,6 +199,6 @@ export async function deleteLibraryVideoAction(input: {
   }
   const result = await deleteUnusedVideoAsset(input.videoLibraryId);
   if (!result.ok) return result;
-  revalidatePath("/admin/video-library");
+  revalidateLibraryPaths();
   return { ok: true, message: "حُذف الفيديو من المكتبة (لم يُحذف أصل Mux تلقائيًا)." };
 }
